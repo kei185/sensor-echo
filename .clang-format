@@ -1,0 +1,36 @@
+BasedOnStyle: LLVM
+
+IndentWidth: 8
+ContinuationIndentWidth: 8
+TabWidth: 8
+UseTab: Never
+
+ColumnLimit: 100 
+
+PointerAlignment: Left
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: true
+  AfterStruct: true
+  AfterEnum: true
+  AfterNamespace: true
+  AfterUnion: true
+  AfterExternBlock: true
+
+  AfterControlStatement: Never
+  BeforeElse: false
+  BeforeCatch: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+SortIncludes: false 
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+IndentCaseLabels: true
+
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
