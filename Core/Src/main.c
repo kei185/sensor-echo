@@ -41,7 +41,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef  htim2;
+TIM_HandleTypeDef htim2;
+
+UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -53,6 +55,7 @@ void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_UART4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -93,7 +96,7 @@ int main(void)
         MX_GPIO_Init();
         MX_USART2_UART_Init();
         MX_TIM2_Init();
-
+  MX_UART4_Init();
         /* USER CODE BEGIN 2 */
         set_motor_mode(MOTOR_MODE_PHASE_ENABLE);
 
@@ -149,7 +152,8 @@ void SystemClock_Config(void)
         RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
         RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-        if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
                 Error_Handler();
         }
 }
@@ -194,6 +198,40 @@ static void MX_TIM2_Init(void)
         HAL_TIM_Base_Start_IT(&htim2);
 
         /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief UART4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 230400;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
+
 }
 
 /**
