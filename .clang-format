@@ -29,6 +29,7 @@ BraceWrapping:
 SortIncludes: false 
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
+# AlignConsecutiveMacros: true
 IndentCaseLabels: true
 
 BinPackArguments: false
