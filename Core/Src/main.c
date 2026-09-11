@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "loop.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -41,10 +42,11 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim2;
-DMA_HandleTypeDef hdma_tim2_up_ch3;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
+DMA_HandleTypeDef  hdma_uart4_rx;
+DMA_HandleTypeDef  hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 
@@ -100,17 +102,11 @@ int main(void)
         MX_TIM2_Init();
         MX_UART4_Init();
         /* USER CODE BEGIN 2 */
-        set_motor_mode(MOTOR_MODE_PHASE_ENABLE);
 
         /* USER CODE END 2 */
 
         /* Infinite loop */
-        /* USER CODE BEGIN WHILE */
-        while (1) {
-                /* USER CODE END WHILE */
-        }
-        /* USER CODE BEGIN 3 */
-        /* USER CODE END 3 */
+        loop();
 }
 
 /**
@@ -227,7 +223,7 @@ static void MX_UART4_Init(void)
                 Error_Handler();
         }
         /* USER CODE BEGIN UART4_Init 2 */
-        HAL_UART_Receive_IT(huart4, uint8_t* pData, uint16_t Size)
+        // HAL_UART_Receive_IT(huart4, uint8_t* pData, uint16_t Size)
 
         /* USER CODE END UART4_Init 2 */
 }
@@ -273,9 +269,12 @@ static void MX_DMA_Init(void)
         __HAL_RCC_DMA1_CLK_ENABLE();
 
         /* DMA interrupt init */
-        /* DMA1_Stream1_IRQn interrupt configuration */
-        HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
-        HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
+        /* DMA1_Stream2_IRQn interrupt configuration */
+        HAL_NVIC_SetPriority(DMA1_Stream2_IRQn, 0, 0);
+        HAL_NVIC_EnableIRQ(DMA1_Stream2_IRQn);
+        /* DMA1_Stream6_IRQn interrupt configuration */
+        HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+        HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
 }
 
 /**

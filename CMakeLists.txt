@@ -21,8 +21,7 @@ endif()
 # Set the project name
 set(CMAKE_PROJECT_NAME sensor-echo)
 
-# Enable compile command to ease indexing with e.g. clangd
-set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Core project settings
 project(${CMAKE_PROJECT_NAME})
@@ -40,18 +39,25 @@ add_subdirectory(cmake/stm32cubemx)
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
+    lib/libcrc-2.0/src/crc8.c
 )
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     src/motor.c
+    src/init.c
+    src/lidar/parser.c
+    src/lidar/lidar.c
+    src/lidar/sys.c
+    src/lidar/core.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     src/
+    lib/libcrc-2.0/include
 )
 
 # Add project symbols (macros)
@@ -65,6 +71,6 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
-
+    libcrc
     # Add user defined libraries
 )

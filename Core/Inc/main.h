@@ -38,6 +38,7 @@ extern "C"
         /* Exported types ------------------------------------------------------------*/
         /* USER CODE BEGIN ET */
 
+        extern UART_HandleTypeDef huart4;
         extern UART_HandleTypeDef huart2;
         /* USER CODE END ET */
 
@@ -59,26 +60,26 @@ extern "C"
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define B1_Pin GPIO_PIN_13
-#define B1_GPIO_Port GPIOC
-#define USART_TX_Pin GPIO_PIN_2
+#define B1_Pin             GPIO_PIN_13
+#define B1_GPIO_Port       GPIOC
+#define USART_TX_Pin       GPIO_PIN_2
 #define USART_TX_GPIO_Port GPIOA
-#define USART_RX_Pin GPIO_PIN_3
+#define USART_RX_Pin       GPIO_PIN_3
 #define USART_RX_GPIO_Port GPIOA
-#define LD2_Pin GPIO_PIN_5
-#define LD2_GPIO_Port GPIOA
-#define TMS_Pin GPIO_PIN_13
-#define TMS_GPIO_Port GPIOA
-#define TCK_Pin GPIO_PIN_14
-#define TCK_GPIO_Port GPIOA
-#define AIN1_Pin GPIO_PIN_10
-#define AIN1_GPIO_Port GPIOC
-#define AIN2_Pin GPIO_PIN_11
-#define AIN2_GPIO_Port GPIOC
-#define M_MODE_Pin GPIO_PIN_12
-#define M_MODE_GPIO_Port GPIOC
-#define SWO_Pin GPIO_PIN_3
-#define SWO_GPIO_Port GPIOB
+#define LD2_Pin            GPIO_PIN_5
+#define LD2_GPIO_Port      GPIOA
+#define TMS_Pin            GPIO_PIN_13
+#define TMS_GPIO_Port      GPIOA
+#define TCK_Pin            GPIO_PIN_14
+#define TCK_GPIO_Port      GPIOA
+#define AIN1_Pin           GPIO_PIN_10
+#define AIN1_GPIO_Port     GPIOC
+#define AIN2_Pin           GPIO_PIN_11
+#define AIN2_GPIO_Port     GPIOC
+#define M_MODE_Pin         GPIO_PIN_12
+#define M_MODE_GPIO_Port   GPIOC
+#define SWO_Pin            GPIO_PIN_3
+#define SWO_GPIO_Port      GPIOB
 
         /* USER CODE BEGIN Private defines */
 

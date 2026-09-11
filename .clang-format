@@ -26,10 +26,11 @@ BraceWrapping:
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
 
+BreakAfterOpenBracketFunction: true
 SortIncludes: false 
 AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
-# AlignConsecutiveMacros: true
+AlignConsecutiveMacros: true
 IndentCaseLabels: true
 
 BinPackArguments: false

@@ -5,7 +5,7 @@ FORMAT_FILE := $(shell find Core/ -name "*.c" -or -name "*.h" -type f)
 
 
 init:
-	cmake --preset Debug
+	cmake --preset Debug  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 format: 
 	clang-format -i ${FORMAT_FILE}
