@@ -36,7 +36,7 @@ typedef enum
 #define SYS_PACKET_HEADER_LE      (SYS_PACKET_HEADER_LSB | (SYS_PACKET_HEADER_MSB << 8))
 // LE Little Endian
 
-#define SYS_PACKET_META_SIZE                                                                       \
+#define SYS_PACKET_META_SIZE                                                             \
         (SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE + SYS_PACKET_TYPE_CODE_SIZE)
 #define SYS_HEALTH_CONTENT_SIZE      3u
 #define SYS_DEVICE_INFO_CONTENT_SIZE 20u
@@ -65,9 +65,9 @@ typedef enum
 typedef enum
 {
         SYS_TYPE_CODE_DEVICE_INFO = 0x04,
-        SYS_TYPE_CODE_HEALTH    = 0x06,
-        SYS_TYPE_CODE_SCAN      = 0x81,
-        SYS_TYPE_CODE_UNDEFINED = 0xFF
+        SYS_TYPE_CODE_HEALTH      = 0x06,
+        SYS_TYPE_CODE_SCAN        = 0x81,
+        SYS_TYPE_CODE_UNDEFINED   = 0xFF
 } SysTypeCode;
 
 typedef struct

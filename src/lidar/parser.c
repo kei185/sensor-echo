@@ -57,7 +57,8 @@ static int8_t* find_start_sign(int8_t* buf, uint32_t len)
         uint32_t next_filed_idx = 0;
 
         for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE == (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
+                if (SYS_PACKET_HEADER_LE ==
+                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
                         break;
 
         if (next_filed_idx >= len)
@@ -67,8 +68,8 @@ static int8_t* find_start_sign(int8_t* buf, uint32_t len)
 }
 
 /**
- * @brief read response length and response mode field and set them  ParserMeta corresponding
- * fields
+ * @brief read response length and response mode field and set them  ParserMeta
+ * corresponding fields
  * @param buf: pointer to the buffer containing the response length byte field
  * @param rfm
  */
@@ -144,8 +145,11 @@ bool health_parse(ParserHealth* this)
 
 bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
 {
-        const uint8_t* content =
-                single_response_content(buf, len, SYS_HEALTH_CONTENT_SIZE, SYS_TYPE_CODE_HEALTH);
+        const uint8_t* content = single_response_content(
+                buf,
+                len,
+                SYS_HEALTH_CONTENT_SIZE,
+                SYS_TYPE_CODE_HEALTH);
         if (content == NULL || health == NULL)
                 return false;
 
@@ -193,7 +197,8 @@ const ParserScanMeta* const PARSER_SCAN_META = &scanMeta;
  */
 static bool is_valid_scan_header(int8_t* buf)
 {
-        return SYS_PACKET_SCAN_HEADER_LE == dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
+        return SYS_PACKET_SCAN_HEADER_LE ==
+               dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
 }
 
 /**
@@ -239,7 +244,8 @@ static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
         uint32_t read_num = 0;
 
         for (uint32_t i = 0; i < meta->data_num && i < CORE_TX_BUF_SIZE; ++i)
-                p[i] = (ParserScannedPoint){.angle = angle(meta, i), .dist = distance(meta)};
+                p[i] = (ParserScannedPoint){.angle = angle(meta, i),
+                                            .dist  = distance(meta)};
 
         return read_num;
 }
