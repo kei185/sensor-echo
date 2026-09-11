@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "lidar/parser.h"
@@ -29,6 +30,9 @@ static ParserMeta* set_res_mode(ParserMeta* pm, uint8_t rm)
 static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
 {
         switch (tc) {
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        pm->type_code = SYS_TYPE_CODE_DEVICE_INFO;
+                        break;
                 case SYS_TYPE_CODE_HEALTH:
                         pm->type_code = SYS_TYPE_CODE_HEALTH;
                         break;
@@ -101,6 +105,25 @@ ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
 }
 
 /**
+ * Health and device-info replies have fixed single-response descriptors.
+ * Match their wire bytes directly so blocking RX does not depend on the DMA reader.
+ */
+static const uint8_t* single_response_content(
+        const uint8_t* buf, uint32_t len, uint8_t content_size, SysTypeCode type_code)
+{
+        const uint8_t descriptor[SYS_PACKET_META_SIZE] =
+                {0xA5, 0x5A, content_size, 0x00, 0x00, 0x00, (uint8_t)type_code};
+
+        if (buf == NULL || len < SYS_PACKET_META_SIZE + content_size)
+                return NULL;
+
+        if (memcmp(buf, descriptor, sizeof(descriptor)) != 0)
+                return NULL;
+
+        return buf + SYS_PACKET_META_SIZE;
+}
+
+/**
  * HEALTH
  */
 
@@ -116,6 +139,44 @@ bool health_parse(ParserHealth* this)
         this->laser_drive_abnormal    = (this->health & (1U << 4)) != 0U;
         this->lidar_data_abnormal     = (this->health & (1U << 5)) != 0U;
 
+        return true;
+}
+
+bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
+{
+        const uint8_t* content =
+                single_response_content(buf, len, SYS_HEALTH_CONTENT_SIZE, SYS_TYPE_CODE_HEALTH);
+        if (content == NULL || health == NULL)
+                return false;
+
+        ParserHealth parsed = {
+                .health = content[0],
+        };
+        health_parse(&parsed);
+        *health = parsed;
+        return true;
+}
+
+/**
+ * DEVICE INFO
+ */
+bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
+{
+        const uint8_t* content = single_response_content(
+                buf,
+                len,
+                SYS_DEVICE_INFO_CONTENT_SIZE,
+                SYS_TYPE_CODE_DEVICE_INFO);
+        if (content == NULL || info == NULL)
+                return false;
+
+        // Manual section 3.3: firmware low byte is major, high byte is minor.
+        ParserDeviceInfo parsed = {.model            = content[0],
+                                   .firmware_major   = content[1],
+                                   .firmware_minor   = content[2],
+                                   .hardware_version = content[3]};
+        memcpy(parsed.serial_number, content + 4, sizeof(parsed.serial_number));
+        *info = parsed;
         return true;
 }
 

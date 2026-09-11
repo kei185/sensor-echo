@@ -44,4 +44,4 @@ void initialize()
 // TODO
 COMMAND which_cmd(uint8_t* buf) {
 
-};
+}
