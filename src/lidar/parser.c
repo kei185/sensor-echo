@@ -179,7 +179,8 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
                                    .firmware_major   = content[1],
                                    .firmware_minor   = content[2],
                                    .hardware_version = content[3]};
-        memcpy(parsed.serial_number, content + 4, sizeof(parsed.serial_number));
+        // Preserve the serial bytes in wire order; no integer endian conversion.
+        memcpy(parsed.serial_number, content + 4, SYS_DEVICE_SERIAL_SIZE);
         *info = parsed;
         return true;
 }
