@@ -1,3 +1,6 @@
+# sensor-echo
+
+通信フレーム仕様は [docs/frame.md](docs/frame.md) を参照。
 
 motor jst 1.5mm gh 
         jstコネクタ　オス　メス
