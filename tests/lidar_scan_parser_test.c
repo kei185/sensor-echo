@@ -103,6 +103,17 @@ int main(void)
         assert(read_scan_frame(start, sizeof(start), points, 3u) == 1u);
         assert(points[0].angle == 180 && points[0].dist == 0);
 
+        // Crossing the signed-angle boundary must happen before truncating Q6.
+        uint8_t boundary[sizeof(start)];
+        memcpy(boundary, start, sizeof(start));
+        boundary[4] = boundary[6] = 0x41; // 180.5 degrees
+        assert(read_scan_frame(boundary, sizeof(boundary), points, 3u) == 1u);
+        assert(points[0].angle == -179);
+        boundary[4] = boundary[6] = 0xC1; // 359.5 degrees
+        boundary[5] = boundary[7] = 0xB3;
+        assert(read_scan_frame(boundary, sizeof(boundary), points, 3u) == 1u);
+        assert(points[0].angle == 0);
+
         ParserScannedPoint unchanged[3];
         memcpy(unchanged, points, sizeof(points));
         assert(!read_scan_frame(NULL, sizeof(scan), points, 3u));

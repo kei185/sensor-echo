@@ -239,10 +239,12 @@ static int16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
         if (meta->data_num > 1u)
                 value_q6 += clockwise_q6 * point_idx / (meta->data_num - 1u);
 
-        // Keep Q6 precision until the final integer-degree PC payload value.
-        uint32_t degrees = (value_q6 % SYS_PACKET_SCAN_FULL_TURN_Q6) /
-                           SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE;
-        return (int16_t)(degrees > 180u ? (int32_t)degrees - 360 : (int32_t)degrees);
+        // Wrap the Q6 angle before truncating so 180.5 degrees becomes -179, not 180.
+        uint32_t wrapped_q6 = value_q6 % SYS_PACKET_SCAN_FULL_TURN_Q6;
+        int32_t  signed_q6  = (int32_t)wrapped_q6;
+        if (wrapped_q6 > 180u * SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE)
+                signed_q6 -= (int32_t)SYS_PACKET_SCAN_FULL_TURN_Q6;
+        return (int16_t)(signed_q6 / (int32_t)SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE);
 }
 
 /**

@@ -62,10 +62,11 @@ typedef struct
 extern const ParserScanMeta* const PARSER_SCAN_META;
 
 /**
- * Parse one complete scan packet starting at its AA 55 header. The output angle is
- * an integer degree in [-179, 180], and distance is in millimetres. Return the
- * number of points, or zero for an invalid/truncated packet or insufficient output
- * capacity (measured in ParserScannedPoint elements). No output is written on
+ * Parse one complete scan packet starting at its AA 55 header. The LiDAR angle
+ * increases clockwise from the zero direction in datasheet section 2.7. The
+ * output angle is an integer degree in [-179, 180], and distance is in millimetres.
+ * Return the number of points, or zero for an invalid/truncated packet or insufficient
+ * output capacity (measured in ParserScannedPoint elements). No output is written on
  * failure. The CS field is skipped, not checked.
  */
 uint32_t read_scan_frame(
