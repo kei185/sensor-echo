@@ -1,6 +1,7 @@
 build
 mx.scratch
 !.settings
+# Local library copies stay ignored; the required CRC files are tracked explicitly.
 lib/
 *.pdf
 .vscode
