@@ -234,11 +234,11 @@ static uint16_t read_angle(int8_t* buf)
         return (uint16_t)(angle_q6 % full_turn_q6);
 }
 
-static uint32_t distance(const ParserScanMeta* meta)
+static uint32_t distance(int8_t* node)
 {
         // Si[0] is intensity; the low two bits of Si[1] are flags.
-        uint8_t low  = (uint8_t)read_byte(meta->data_frame_head + 1);
-        uint8_t high = (uint8_t)read_byte(meta->data_frame_head + 2);
+        uint8_t low  = (uint8_t)read_byte(node + 1);
+        uint8_t high = (uint8_t)read_byte(node + 2);
         return ((uint32_t)high << 6) | (low >> 2);
 }
 
@@ -261,17 +261,24 @@ static uint16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
 }
 
 /**
- * @param buf supposed to point to the head of data fields
+ * @param meta data_frame_head must point to the first three-byte Si field
+ * @param p output array with room for data_num points
+ * @return number of decoded points, or zero for invalid arguments or angles
  */
 static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
 {
-        uint32_t read_num = 0;
+        if (meta == NULL || p == NULL || meta->data_frame_head == NULL ||
+            angle(meta, 0) == PARSER_SCAN_ANGLE_INVALID_Q6)
+                return 0;
 
-        for (uint32_t i = 0; i < meta->data_num && i < CORE_TX_BUF_SIZE; ++i)
-                p[i] = (ParserScannedPoint){.angle = angle(meta, i),
-                                            .dist  = distance(meta)};
+        for (uint32_t i = 0; i < meta->data_num; ++i) {
+                // Move to this point's three-byte Si field before decoding its distance.
+                int8_t* node = meta->data_frame_head + i * SYS_PACKET_POINT_DATA_SIZE;
+                p[i]         = (ParserScannedPoint){.angle = angle(meta, i),
+                                                    .dist  = distance(node)};
+        }
 
-        return read_num;
+        return meta->data_num;
 }
 
 /**
