@@ -14,7 +14,9 @@
 |0xAA55|-|-| 0x02  IMU | -|kinematic data| 
 |0xAA55|-|-| 0x03  Encoder |-| odometry data| 
 
-※ payload size is a multiple of 8 bit  
+The header is 10 bytes. The start-of-frame bytes are `0xAA 0x55`; payload length
+and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
+be written before the header. Payload length counts payload bytes only.
 
 ### System Message
 TODO
@@ -42,9 +44,16 @@ TODO
 TODO
 
 ### CRC
-|||
+The CRC field uses the 8-bit `crc_8()` function from libcrc. For now, its input
+is only the two payload-length bytes at header offsets 2 and 3. Process each
+byte most-significant bit first and write the full 8-bit result at offset 4.
+The CRC does not currently cover the other header fields or the payload.
+
+| Parameter | Value |
 |---|---|
-| Generator  |  CRC-8|
-| CRC Width|  7bit |
-| CRC Byte Field[7] | reserved |
-| CRC Byte Field[6:0] | CRC |
+| Width | 8 bits |
+| Polynomial | `x^8 + x^5 + x^4 + 1`, represented as `0x31` without the top bit |
+| Initial value | `0x00` |
+| Input and output reflection | None |
+| Final XOR | `0x00` |
+| Check value for ASCII `123456789` | `0xA2` |
