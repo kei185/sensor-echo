@@ -86,4 +86,4 @@ If one TX buffer is transmitting and the other is queued, neither is available. 
 
 A TX completion releases the transmitted buffer and starts a queued transfer when one exists.
 
-For PC commands and frame formats, see [frame.md](frame.md). These diagrams describe the intended design, not the current implementation status.
+For PC commands and frame formats, see [frame.md](frame.md).
