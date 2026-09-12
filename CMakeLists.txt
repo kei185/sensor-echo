@@ -36,12 +36,6 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
-# Link directories setup
-target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined library search paths
-    lib/libcrc-2.0/src/crc8.c
-)
-
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
@@ -51,7 +45,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/lidar.c
     src/lidar/sys.c
     src/lidar/core.c
+    src/tx/frame.c
     src/tx/header.c
+    lib/libcrc-2.0/src/crc8.c
 )
 
 # Add include paths
@@ -72,6 +68,5 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
-    libcrc
     # Add user defined libraries
 )

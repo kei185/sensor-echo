@@ -2,8 +2,25 @@
 #define FRAME_H
 #include <stdint.h>
 
-#define SOF_SIZE 2u
-const uint8_t START_OF_FRAME[SOF_SIZE] = {0xAA, 0x55};
+#define SOF_SIZE             2u
+#define TX_FRAME_HEADER_SIZE 10u
+
+extern const uint8_t START_OF_FRAME[SOF_SIZE];
+
+typedef enum
+{
+        FRAME_TYPE_SYS = 0,
+        FRAME_TYPE_LIDAR,
+        FRAME_TYPE_IMU,
+        FRAME_TYPE_ENC,
+} FrameType;
+
+typedef struct
+{
+        FrameType type;
+        uint32_t  len;
+        uint8_t*  payload_head;
+} TxFrame;
 
 #define COMMAND_NUM 4u
 typedef enum
@@ -23,11 +40,7 @@ typedef struct
         char    ack[ACK_SIZE];
 } Operation;
 
-const char      MSG_DEVICE_READY[ACK_SIZE] = "DEVICE READY";
-const Operation OP[COMMAND_NUM]            = {
-        {.command = {0xAA, 0xA1}, .ack = "GET STAT ACK"},
-        {.command = {0xAA, 0xA2}, .ack = "SRT SCAN ACK"},
-        {.command = {0xAA, 0xA3}, .ack = "END SCAN ACK"},
-};
+extern const char      MSG_DEVICE_READY[ACK_SIZE];
+extern const Operation OP[COMMAND_NUM];
 
 #endif

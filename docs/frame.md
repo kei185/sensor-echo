@@ -44,15 +44,16 @@ TODO
 TODO
 
 ### CRC
-The CRC field uses an 8-bit CRC. Process each byte most-significant bit first.
-The CRC covers the full frame in wire order, including the payload, but skips
-the CRC byte at header offset 4. Write the full 8-bit remainder into that byte.
+The CRC field uses the 8-bit `crc_8()` function from libcrc. For now, its input
+is only the two payload-length bytes at header offsets 2 and 3. Process each
+byte most-significant bit first and write the full 8-bit result at offset 4.
+The CRC does not currently cover the other header fields or the payload.
 
 | Parameter | Value |
 |---|---|
 | Width | 8 bits |
-| Polynomial | `x^8 + x^2 + x + 1`, represented as `0x07` without the top bit |
+| Polynomial | `x^8 + x^5 + x^4 + 1`, represented as `0x31` without the top bit |
 | Initial value | `0x00` |
 | Input and output reflection | None |
 | Final XOR | `0x00` |
-| Check value for ASCII `123456789` | `0xF4` |
+| Check value for ASCII `123456789` | `0xA2` |
