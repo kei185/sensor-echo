@@ -39,7 +39,8 @@ typedef struct RxFrameDeviceInfo
         uint8_t firmware_major;
         uint8_t firmware_minor;
         uint8_t hardware_version;
-        uint8_t serial_number[SYS_DEVICE_SERIAL_SIZE]; // Binary bytes, not a C string.
+        // Binary bytes in wire order; not a C string.
+        uint8_t serial_number[SYS_PACKET_DEVICE_SERIAL_SIZE];
 } ParserDeviceInfo;
 
 bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info);

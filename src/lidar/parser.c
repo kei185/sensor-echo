@@ -148,7 +148,7 @@ bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
         const uint8_t* content = single_response_content(
                 buf,
                 len,
-                SYS_HEALTH_CONTENT_SIZE,
+                SYS_PACKET_HEALTH_CONTENT_SIZE,
                 SYS_TYPE_CODE_HEALTH);
         if (content == NULL || health == NULL)
                 return false;
@@ -169,7 +169,7 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
         const uint8_t* content = single_response_content(
                 buf,
                 len,
-                SYS_DEVICE_INFO_CONTENT_SIZE,
+                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
                 SYS_TYPE_CODE_DEVICE_INFO);
         if (content == NULL || info == NULL)
                 return false;
@@ -180,7 +180,7 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
                                    .firmware_minor   = content[2],
                                    .hardware_version = content[3]};
         // Preserve the serial bytes in wire order; no integer endian conversion.
-        memcpy(parsed.serial_number, content + 4, SYS_DEVICE_SERIAL_SIZE);
+        memcpy(parsed.serial_number, content + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
         *info = parsed;
         return true;
 }
