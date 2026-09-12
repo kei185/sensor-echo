@@ -188,70 +188,63 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
 /**
  * SCAN
  */
-static ParserScanMeta scanMeta = {0};
+static ParserScanMeta scanMeta = {
+        .start_angle = 0, .end_angle = 0, .data_num = 0, .data_frame_head = NULL};
 
 const ParserScanMeta* const PARSER_SCAN_META = &scanMeta;
 
 /**
  * @param buf supposed to point to packet header fields
  */
-static bool is_valid_scan_header(const uint8_t* buf)
+static bool is_valid_scan_header(int8_t* buf)
 {
-        // PH arrives as AA 55; reject a reversed header before parsing fields.
-        return buf[0] == 0xAA && buf[1] == 0x55;
+        return SYS_PACKET_SCAN_HEADER_LE ==
+               dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
 }
 
 /**
  * @param buf supposed to point to CT fields
  */
-static bool is_start_frame(const uint8_t* buf)
+static bool is_start_frame(int8_t* buf)
 {
-        // Only CT bit 0 marks a new revolution; the upper bits carry other data.
-        return SYS_PACKET_SCAN_CT_START == (SYS_PACKET_SCAN_CT_START_MASK & buf[0]);
+        return SYS_PACKET_SCAN_CT_START ==
+               (SYS_PACKET_SCAN_CT_START_MASK &
+                (uint8_t)dec_little_endian(buf, SYS_PACKET_SCAN_CT_SIZE));
 }
 
-// LSN is at the current field cursor, not at the packet header.
-static uint8_t read_qty(const uint8_t* buf) { return buf[0]; }
+/**
+ *
+ */
+static uint32_t read_qty(int8_t* buf) { return read_byte(buf); }
 
 /**
  * @param buf supposed to point to angle fields
  */
-static bool read_angle(const uint8_t* buf, uint16_t* angle_q6)
+static int16_t read_angle(int8_t* buf)
 {
-        uint16_t raw = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
-        // Bit 0 is the required check bit; the remaining bits encode 1/64 degree units.
-        if ((raw & 1u) == 0u || (raw >> 1) > SYS_PACKET_SCAN_FULL_TURN_Q6)
-                return false;
+        uint32_t       raw          = dec_little_endian(buf, SYS_PACKET_SCAN_ANGLE_SIZE);
+        uint32_t       angle_q6     = raw >> 1;
+        const uint32_t full_turn_q6 = 360u * 64u;
 
-        // The encoded 360-degree endpoint is the same direction as zero.
-        *angle_q6 = (raw >> 1) % SYS_PACKET_SCAN_FULL_TURN_Q6;
-        return true;
+        // Bit 0 is the required check bit; the other bits encode degrees * 64.
+        if ((raw & 1u) == 0u || angle_q6 > full_turn_q6)
+                return -1;
+
+        return (int16_t)(angle_q6 % full_turn_q6);
 }
 
-static uint16_t distance(const uint8_t* node)
+static int32_t distance(const ParserScanMeta* meta)
 {
-        // Si[0] is intensity. Skip Si[1]'s low flag bits, then combine its upper
-        // six bits with Si[2] to recover the 14-bit distance in millimetres.
-        return ((uint16_t)node[2] << 6) | ((uint16_t)node[1] >> 2);
+        // Si[0] is intensity; the low two bits of Si[1] are flags.
+        uint8_t low  = (uint8_t)read_byte(meta->data_frame_head + 1);
+        uint8_t high = (uint8_t)read_byte(meta->data_frame_head + 2);
+        return ((int32_t)high << 6) | (low >> 2);
 }
 
-static int16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
+static int32_t angle(const ParserScanMeta* meta, uint32_t point_idx)
 {
-        // Use the clockwise span so a packet crossing 360 degrees advances through zero.
-        uint32_t clockwise_q6 = (meta->end_angle_q6 + SYS_PACKET_SCAN_FULL_TURN_Q6 -
-                                 meta->start_angle_q6) %
-                                SYS_PACKET_SCAN_FULL_TURN_Q6;
-        uint32_t value_q6     = meta->start_angle_q6;
 
-        if (meta->data_num > 1u)
-                value_q6 += clockwise_q6 * point_idx / (meta->data_num - 1u);
-
-        // Wrap the Q6 angle before truncating so 180.5 degrees becomes -179, not 180.
-        uint32_t wrapped_q6 = value_q6 % SYS_PACKET_SCAN_FULL_TURN_Q6;
-        int32_t  signed_q6  = (int32_t)wrapped_q6;
-        if (wrapped_q6 > 180u * SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE)
-                signed_q6 -= (int32_t)SYS_PACKET_SCAN_FULL_TURN_Q6;
-        return (int16_t)(signed_q6 / (int32_t)SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE);
+        // TODO
 }
 
 /**
@@ -259,56 +252,46 @@ static int16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
  */
 static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
 {
-        for (uint32_t i = 0; i < meta->data_num; ++i) {
-                // Each Si occupies three bytes; move to this point before decoding it.
-                const uint8_t* node =
-                        meta->data_frame_head + i * SYS_PACKET_POINT_DATA_SIZE;
-                p[i] = (ParserScannedPoint){.angle = angle(meta, i),
-                                            .dist  = distance(node)};
-        }
+        uint32_t read_num = 0;
 
-        return meta->data_num;
+        for (uint32_t i = 0; i < meta->data_num && i < CORE_TX_BUF_SIZE; ++i)
+                p[i] = (ParserScannedPoint){.angle = angle(meta, i),
+                                            .dist  = distance(meta)};
+
+        return read_num;
 }
 
 /**
  * @brief pack point data to array interpreting bytes of the buffer
  * @return number of point data packed into points array
  */
-uint32_t read_scan_frame(
-        const uint8_t* buf, uint32_t len, ParserScannedPoint* points, uint32_t capacity)
+uint32_t read_scan_frame(int8_t* buf, ParserScannedPoint* points)
 {
-        // Require the complete fixed header before reading any input byte.
-        if (buf == NULL || points == NULL || len < SYS_PACKET_SCAN_FIXED_SIZE ||
-            !is_valid_scan_header(buf))
+        int8_t* frame_head = buf;
+        // read header
+        if (is_valid_scan_header(frame_head))
                 return 0;
 
-        const uint8_t* frame_head = buf + SYS_PACKET_SCAN_HEADER_SIZE;
-        bool           isf        = is_start_frame(frame_head);
+        frame_head += SYS_PACKET_SCAN_HEADER_SIZE;
+
+        // read ct
+        bool isf = is_start_frame(frame_head);
         frame_head += SYS_PACKET_SCAN_CT_SIZE;
 
-        ParserScanMeta parsed = {.data_num = read_qty(frame_head)};
-        // The CT start packet has one sample; validate its LSN, packet length,
-        // and output capacity before decoding or writing any point.
-        if (parsed.data_num == 0u || capacity < parsed.data_num ||
-            (isf && parsed.data_num != 1u) ||
-            len < SYS_PACKET_SCAN_FIXED_SIZE +
-                            parsed.data_num * SYS_PACKET_POINT_DATA_SIZE)
-                return 0;
+        // read data num
+        scanMeta.data_num = read_qty(buf);
         frame_head += SYS_PACKET_SCAN_DATA_QTY_SIZE;
 
-        if (!read_angle(frame_head, &parsed.start_angle_q6))
-                return 0;
+        // read angles
+        scanMeta.start_angle = read_angle(buf);
         frame_head += SYS_PACKET_SCAN_ANGLE_SIZE;
 
-        if (!read_angle(frame_head, &parsed.end_angle_q6))
-                return 0;
+        scanMeta.end_angle = read_angle(buf);
         frame_head += SYS_PACKET_SCAN_ANGLE_SIZE;
 
-        // Skip the two-byte CS field; XOR verification is intentionally deferred.
-        parsed.data_frame_head = frame_head + SYS_PACKET_SCAN_CS_SIZE;
-        uint32_t read_num      = read_points(&parsed, points);
-        // Publish metadata only after the complete packet has passed validation.
-        scanMeta = parsed;
+        // read points and pack them into buf
+        scanMeta.data_frame_head = frame_head;
+        uint32_t read_num        = read_points(&scanMeta, points);
 
         return read_num;
 }

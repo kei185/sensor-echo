@@ -53,24 +53,14 @@ typedef struct ScannedPoint
 
 typedef struct
 {
-        // Preserve 1/64-degree endpoints until all point angles are interpolated.
-        uint16_t       start_angle_q6;
-        uint16_t       end_angle_q6;
-        uint32_t       data_num;
-        const uint8_t* data_frame_head;
+        int8_t   start_angle;
+        int8_t   end_angle;
+        uint32_t data_num;
+        int8_t*  data_frame_head;
 } ParserScanMeta;
 
 extern const ParserScanMeta* const PARSER_SCAN_META;
 
-/**
- * Parse one complete scan packet starting at its AA 55 header. The LiDAR angle
- * increases clockwise from the zero direction in datasheet section 2.7. The
- * output angle is an integer degree in [-179, 180], and distance is in millimetres.
- * Return the number of points, or zero for an invalid/truncated packet or insufficient
- * output capacity (measured in ParserScannedPoint elements). No output is written on
- * failure. The CS field is skipped, not checked.
- */
-uint32_t read_scan_frame(
-        const uint8_t* buf, uint32_t len, ParserScannedPoint* points, uint32_t capacity);
+// uint32_t read_scan_frame(int8_t*, ParserScannedPoint*z);
 
 #endif /* LIDAR_PARSER_H */

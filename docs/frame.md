@@ -30,10 +30,6 @@ packet
 +16: "16bit signed angle (180,-179)"
 ```
 
-The angle is wrapped into the signed range, then truncated to whole degrees.
-0° follows the T-mini Plus zero direction in the data sheet's Figure 4, and positive
-angles rotate clockwise. Sensor angles from 181° to 359° map to -179° to -1°.
-
 
 ### IMU Frame payload 
 TODO
