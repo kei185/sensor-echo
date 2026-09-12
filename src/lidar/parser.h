@@ -48,13 +48,16 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
 typedef struct ScannedPoint
 {
         uint16_t dist;
-        int16_t  angle;
+        int16_t  angle; // signed angle in Q6 degrees (degrees * 64)
 } ParserScannedPoint;
+
+// Valid raw Q6 is 0..23039; signed Q6 is -11519..11520. INT16_MIN is impossible.
+#define PARSER_SCAN_ANGLE_INVALID_Q6 INT16_MIN
 
 typedef struct
 {
-        int8_t   start_angle;
-        int8_t   end_angle;
+        int16_t  start_angle; // decoded sensor angle in Q6 degrees
+        int16_t  end_angle;   // decoded sensor angle in Q6 degrees
         uint32_t data_num;
         int8_t*  data_frame_head;
 } ParserScanMeta;
