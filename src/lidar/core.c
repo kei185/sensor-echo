@@ -43,6 +43,7 @@ uint32_t dec_little_endian(int8_t* buf, uint8_t len)
         uint32_t ret = 0;
 
         for (uint8_t i = 0; i < len; ++i) {
+                // Preserve the wire byte before widening the signed read_byte result.
                 ret |= (uint32_t)(uint8_t)read_byte(buf) << (i * 8);
                 buf++;
         }

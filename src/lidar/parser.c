@@ -233,12 +233,12 @@ static int16_t read_angle(int8_t* buf)
         return (int16_t)(angle_q6 % full_turn_q6);
 }
 
-static int32_t distance(const ParserScanMeta* meta)
+static uint32_t distance(const ParserScanMeta* meta)
 {
         // Si[0] is intensity; the low two bits of Si[1] are flags.
         uint8_t low  = (uint8_t)read_byte(meta->data_frame_head + 1);
         uint8_t high = (uint8_t)read_byte(meta->data_frame_head + 2);
-        return ((int32_t)high << 6) | (low >> 2);
+        return ((uint32_t)high << 6) | (low >> 2);
 }
 
 static int32_t angle(const ParserScanMeta* meta, uint32_t point_idx)
