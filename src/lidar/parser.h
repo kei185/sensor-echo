@@ -53,6 +53,7 @@ typedef struct ScannedPoint
 
 typedef struct
 {
+        // Preserve 1/64-degree endpoints until all point angles are interpolated.
         uint16_t       start_angle_q6;
         uint16_t       end_angle_q6;
         uint32_t       data_num;
