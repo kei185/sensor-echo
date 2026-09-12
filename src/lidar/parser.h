@@ -48,14 +48,17 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
 typedef struct ScannedPoint
 {
         uint16_t dist;
-        int16_t  angle;
+        uint16_t angle; // nonnegative angle in Q6 degrees (degrees * 64)
 } ParserScannedPoint;
+
+// Valid Q6 angles are 0..23039; UINT16_MAX cannot be a decoded angle.
+#define PARSER_SCAN_ANGLE_INVALID_Q6 UINT16_MAX
 
 typedef struct
 {
-        int8_t   start_angle;
-        int8_t   end_angle;
-        uint32_t data_num;
+        uint16_t start_angle; // decoded sensor angle in Q6 degrees
+        uint16_t end_angle;   // decoded sensor angle in Q6 degrees
+        uint8_t  data_num;    // one-byte LSN field
         int8_t*  data_frame_head;
 } ParserScanMeta;
 

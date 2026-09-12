@@ -27,8 +27,12 @@ size: 8 Byte * point number
 
 packet
 +16: "16bit unsigned distance"
-+16: "16bit signed angle (180,-179)"
++16: "16bit unsigned angle in Q6 degrees [0, 360)"
 ```
+
+The angle value is degrees multiplied by 64; for example, 45.5° is 2912.
+Angles rotate clockwise from the LiDAR's zero direction. The encoded range is
+0..23039; 360° wraps to zero.
 
 
 ### IMU Frame payload 

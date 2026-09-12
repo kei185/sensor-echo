@@ -215,26 +215,49 @@ static bool is_start_frame(int8_t* buf)
 /**
  *
  */
-static uint32_t read_qty(int8_t* buf) { return read_byte(buf); }
+static uint8_t read_qty(int8_t* buf) { return (uint8_t)read_byte(buf); }
 
 /**
  * @param buf supposed to point to angle fields
+ * @return angle in Q6 degrees, or PARSER_SCAN_ANGLE_INVALID_Q6 if the field is invalid
  */
-static int16_t read_angle(int8_t* buf)
+static uint16_t read_angle(int8_t* buf)
 {
-        // TODO
+        uint32_t       raw          = dec_little_endian(buf, SYS_PACKET_SCAN_ANGLE_SIZE);
+        uint32_t       angle_q6     = raw >> 1;
+        const uint32_t full_turn_q6 = 360u * 64u;
+
+        // Bit 0 is the required check bit; the other bits encode degrees * 64.
+        if ((raw & 1u) == 0u || angle_q6 > full_turn_q6)
+                return PARSER_SCAN_ANGLE_INVALID_Q6;
+
+        return (uint16_t)(angle_q6 % full_turn_q6);
 }
 
-static int32_t distance(const ParserScanMeta* meta)
+static uint32_t distance(const ParserScanMeta* meta)
 {
-
-        // TODO
+        // Si[0] is intensity; the low two bits of Si[1] are flags.
+        uint8_t low  = (uint8_t)read_byte(meta->data_frame_head + 1);
+        uint8_t high = (uint8_t)read_byte(meta->data_frame_head + 2);
+        return ((uint32_t)high << 6) | (low >> 2);
 }
 
-static int32_t angle(const ParserScanMeta* meta, uint32_t point_idx)
+static uint16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
 {
+        const uint32_t full_turn_q6 = 360u * 64u;
+        // LSN is one byte, so the interpolation product fits in uint32_t.
+        if (meta == NULL || meta->data_num == 0u || point_idx >= meta->data_num ||
+            meta->start_angle >= full_turn_q6 || meta->end_angle >= full_turn_q6)
+                return PARSER_SCAN_ANGLE_INVALID_Q6;
 
-        // TODO
+        uint32_t clockwise_q6 =
+                ((uint32_t)meta->end_angle + full_turn_q6 - (uint32_t)meta->start_angle) %
+                full_turn_q6;
+        uint32_t point_angle_q6 = (uint32_t)meta->start_angle;
+        if (meta->data_num > 1u)
+                point_angle_q6 += clockwise_q6 * point_idx / (meta->data_num - 1u);
+
+        return (uint16_t)(point_angle_q6 % full_turn_q6);
 }
 
 /**
