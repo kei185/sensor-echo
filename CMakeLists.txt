@@ -51,6 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/lidar.c
     src/lidar/sys.c
     src/lidar/core.c
+    src/tx/header.c
 )
 
 # Add include paths
