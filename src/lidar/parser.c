@@ -188,53 +188,61 @@ bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* 
 /**
  * SCAN
  */
-static ParserScanMeta scanMeta = {
-        .start_angle = 0, .end_angle = 0, .data_num = 0, .data_frame_head = NULL};
+static ParserScanMeta scanMeta = {0};
 
 const ParserScanMeta* const PARSER_SCAN_META = &scanMeta;
 
 /**
  * @param buf supposed to point to packet header fields
  */
-static bool is_valid_scan_header(int8_t* buf)
+static bool is_valid_scan_header(const uint8_t* buf)
 {
-        return SYS_PACKET_SCAN_HEADER_LE ==
-               dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
+        return buf[0] == 0xAA && buf[1] == 0x55;
 }
 
 /**
  * @param buf supposed to point to CT fields
  */
-static bool is_start_frame(int8_t* buf)
+static bool is_start_frame(const uint8_t* buf)
 {
-        return SYS_PACKET_SCAN_CT_START ==
-               (SYS_PACKET_SCAN_CT_START_MASK &
-                (uint8_t)dec_little_endian(buf, SYS_PACKET_SCAN_CT_SIZE));
+        return SYS_PACKET_SCAN_CT_START == (SYS_PACKET_SCAN_CT_START_MASK & buf[0]);
 }
 
-/**
- *
- */
-static uint32_t read_qty(int8_t* buf) { return read_byte(buf); }
+static uint8_t read_qty(const uint8_t* buf) { return buf[0]; }
 
 /**
  * @param buf supposed to point to angle fields
  */
-static int16_t read_angle(int8_t* buf)
+static bool read_angle(const uint8_t* buf, uint16_t* angle_q6)
 {
-        // TODO
+        uint16_t raw = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+        if ((raw & 1u) == 0u || (raw >> 1) > SYS_PACKET_SCAN_FULL_TURN_Q6)
+                return false;
+
+        *angle_q6 = (raw >> 1) % SYS_PACKET_SCAN_FULL_TURN_Q6;
+        return true;
 }
 
-static int32_t distance(const ParserScanMeta* meta)
+static uint16_t distance(const uint8_t* node)
 {
-
-        // TODO
+        // Si[0] is intensity; Si[1] has flags in bits 7:6 and distance in 5:2.
+        return ((uint16_t)node[2] << 6) | ((uint16_t)node[1] >> 2);
 }
 
-static int32_t angle(const ParserScanMeta* meta, uint32_t point_idx)
+static int16_t angle(const ParserScanMeta* meta, uint32_t point_idx)
 {
+        uint32_t clockwise_q6 = (meta->end_angle_q6 + SYS_PACKET_SCAN_FULL_TURN_Q6 -
+                                 meta->start_angle_q6) %
+                                SYS_PACKET_SCAN_FULL_TURN_Q6;
+        uint32_t value_q6     = meta->start_angle_q6;
 
-        // TODO
+        if (meta->data_num > 1u)
+                value_q6 += clockwise_q6 * point_idx / (meta->data_num - 1u);
+
+        // Keep Q6 precision until the final integer-degree PC payload value.
+        uint32_t degrees = (value_q6 % SYS_PACKET_SCAN_FULL_TURN_Q6) /
+                           SYS_PACKET_SCAN_ANGLE_Q6_PER_DEGREE;
+        return (int16_t)(degrees > 180u ? (int32_t)degrees - 360 : (int32_t)degrees);
 }
 
 /**
@@ -242,46 +250,51 @@ static int32_t angle(const ParserScanMeta* meta, uint32_t point_idx)
  */
 static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
 {
-        uint32_t read_num = 0;
-
-        for (uint32_t i = 0; i < meta->data_num && i < CORE_TX_BUF_SIZE; ++i)
+        for (uint32_t i = 0; i < meta->data_num; ++i) {
+                const uint8_t* node =
+                        meta->data_frame_head + i * SYS_PACKET_POINT_DATA_SIZE;
                 p[i] = (ParserScannedPoint){.angle = angle(meta, i),
-                                            .dist  = distance(meta)};
+                                            .dist  = distance(node)};
+        }
 
-        return read_num;
+        return meta->data_num;
 }
 
 /**
  * @brief pack point data to array interpreting bytes of the buffer
  * @return number of point data packed into points array
  */
-uint32_t read_scan_frame(int8_t* buf, ParserScannedPoint* points)
+uint32_t read_scan_frame(
+        const uint8_t* buf, uint32_t len, ParserScannedPoint* points, uint32_t capacity)
 {
-        int8_t* frame_head = buf;
-        // read header
-        if (is_valid_scan_header(frame_head))
+        if (buf == NULL || points == NULL || len < SYS_PACKET_SCAN_FIXED_SIZE ||
+            !is_valid_scan_header(buf))
                 return 0;
 
-        frame_head += SYS_PACKET_SCAN_HEADER_SIZE;
-
-        // read ct
-        bool isf = is_start_frame(frame_head);
+        const uint8_t* frame_head = buf + SYS_PACKET_SCAN_HEADER_SIZE;
+        bool           isf        = is_start_frame(frame_head);
         frame_head += SYS_PACKET_SCAN_CT_SIZE;
 
-        // read data num
-        scanMeta.data_num = read_qty(buf);
+        ParserScanMeta parsed = {.data_num = read_qty(frame_head)};
+        if (parsed.data_num == 0u || capacity < parsed.data_num ||
+            (isf && parsed.data_num != 1u) ||
+            len < SYS_PACKET_SCAN_FIXED_SIZE +
+                            parsed.data_num * SYS_PACKET_POINT_DATA_SIZE)
+                return 0;
         frame_head += SYS_PACKET_SCAN_DATA_QTY_SIZE;
 
-        // read angles
-        scanMeta.start_angle = read_angle(buf);
+        if (!read_angle(frame_head, &parsed.start_angle_q6))
+                return 0;
         frame_head += SYS_PACKET_SCAN_ANGLE_SIZE;
 
-        scanMeta.end_angle = read_angle(buf);
+        if (!read_angle(frame_head, &parsed.end_angle_q6))
+                return 0;
         frame_head += SYS_PACKET_SCAN_ANGLE_SIZE;
 
-        // read points and pack them into buf
-        scanMeta.data_frame_head = frame_head;
-        uint32_t read_num        = read_points(&scanMeta, points);
+        // Skip the two-byte CS field; XOR verification is intentionally deferred.
+        parsed.data_frame_head = frame_head + SYS_PACKET_SCAN_CS_SIZE;
+        uint32_t read_num      = read_points(&parsed, points);
+        scanMeta               = parsed;
 
         return read_num;
 }
