@@ -25,6 +25,26 @@ typedef struct RxFrameHealth
 
 bool health_parse(ParserHealth*);
 
+/**
+ * Parse a complete single-response frame starting at buf (including its 7-byte
+ * descriptor). The bytes must already be received; these functions do not wait for UART
+ * or DMA. Return true on successful parsing, including a healthy status of zero. Return
+ * false for an incomplete or mismatched frame, leaving the output unchanged.
+ */
+bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health);
+
+typedef struct RxFrameDeviceInfo
+{
+        uint8_t model;
+        uint8_t firmware_major;
+        uint8_t firmware_minor;
+        uint8_t hardware_version;
+        // Binary bytes in wire order; not a C string.
+        uint8_t serial_number[SYS_PACKET_DEVICE_SERIAL_SIZE];
+} ParserDeviceInfo;
+
+bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info);
+
 typedef struct ScannedPoint
 {
         uint16_t dist;

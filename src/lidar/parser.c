@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "lidar/parser.h"
@@ -29,6 +30,9 @@ static ParserMeta* set_res_mode(ParserMeta* pm, uint8_t rm)
 static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
 {
         switch (tc) {
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        pm->type_code = SYS_TYPE_CODE_DEVICE_INFO;
+                        break;
                 case SYS_TYPE_CODE_HEALTH:
                         pm->type_code = SYS_TYPE_CODE_HEALTH;
                         break;
@@ -53,7 +57,8 @@ static int8_t* find_start_sign(int8_t* buf, uint32_t len)
         uint32_t next_filed_idx = 0;
 
         for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE == (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
+                if (SYS_PACKET_HEADER_LE ==
+                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
                         break;
 
         if (next_filed_idx >= len)
@@ -63,8 +68,8 @@ static int8_t* find_start_sign(int8_t* buf, uint32_t len)
 }
 
 /**
- * @brief read response length and response mode field and set them  ParserMeta corresponding
- * fields
+ * @brief read response length and response mode field and set them  ParserMeta
+ * corresponding fields
  * @param buf: pointer to the buffer containing the response length byte field
  * @param rfm
  */
@@ -101,6 +106,25 @@ ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
 }
 
 /**
+ * Health and device-info replies have fixed single-response descriptors.
+ * Match their wire bytes directly so blocking RX does not depend on the DMA reader.
+ */
+static const uint8_t* single_response_content(
+        const uint8_t* buf, uint32_t len, uint8_t content_size, SysTypeCode type_code)
+{
+        const uint8_t descriptor[SYS_PACKET_META_SIZE] =
+                {0xA5, 0x5A, content_size, 0x00, 0x00, 0x00, (uint8_t)type_code};
+
+        if (buf == NULL || len < SYS_PACKET_META_SIZE + content_size)
+                return NULL;
+
+        if (memcmp(buf, descriptor, sizeof(descriptor)) != 0)
+                return NULL;
+
+        return buf + SYS_PACKET_META_SIZE;
+}
+
+/**
  * HEALTH
  */
 
@@ -119,6 +143,48 @@ bool health_parse(ParserHealth* this)
         return true;
 }
 
+bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
+{
+        const uint8_t* content = single_response_content(
+                buf,
+                len,
+                SYS_PACKET_HEALTH_CONTENT_SIZE,
+                SYS_TYPE_CODE_HEALTH);
+        if (content == NULL || health == NULL)
+                return false;
+
+        ParserHealth parsed = {
+                .health = content[0],
+        };
+        health_parse(&parsed);
+        *health = parsed;
+        return true;
+}
+
+/**
+ * DEVICE INFO
+ */
+bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
+{
+        const uint8_t* content = single_response_content(
+                buf,
+                len,
+                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
+                SYS_TYPE_CODE_DEVICE_INFO);
+        if (content == NULL || info == NULL)
+                return false;
+
+        // Manual section 3.3: firmware low byte is major, high byte is minor.
+        ParserDeviceInfo parsed = {.model            = content[0],
+                                   .firmware_major   = content[1],
+                                   .firmware_minor   = content[2],
+                                   .hardware_version = content[3]};
+        // Preserve the serial bytes in wire order; no integer endian conversion.
+        memcpy(parsed.serial_number, content + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
+        *info = parsed;
+        return true;
+}
+
 /**
  * SCAN
  */
@@ -132,7 +198,8 @@ const ParserScanMeta* const PARSER_SCAN_META = &scanMeta;
  */
 static bool is_valid_scan_header(int8_t* buf)
 {
-        return SYS_PACKET_SCAN_HEADER_LE == dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
+        return SYS_PACKET_SCAN_HEADER_LE ==
+               dec_little_endian(buf, SYS_PACKET_SCAN_HEADER_SIZE);
 }
 
 /**
@@ -178,7 +245,8 @@ static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
         uint32_t read_num = 0;
 
         for (uint32_t i = 0; i < meta->data_num && i < CORE_TX_BUF_SIZE; ++i)
-                p[i] = (ParserScannedPoint){.angle = angle(meta, i), .dist = distance(meta)};
+                p[i] = (ParserScannedPoint){.angle = angle(meta, i),
+                                            .dist  = distance(meta)};
 
         return read_num;
 }
