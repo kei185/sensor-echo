@@ -49,8 +49,8 @@ typedef struct
 } ParserScanMeta;
 
 ParserMeta* read_meta(int8_t*, uint32_t, ParserMeta*);
-bool        read_device_info_frame(const uint8_t*, ParserDeviceInfo*);
+bool        read_health_frame(const int8_t*, ParserHealth*);
 uint32_t    read_scan_frame(int8_t*, ParserScannedPoint*);
-bool        read_device_info_frame(const uint8_t*, ParserDeviceInfo*);
+bool        read_device_info_frame(const int8_t*, ParserDeviceInfo*);
 
 #endif /* LIDAR_PARSER_H */

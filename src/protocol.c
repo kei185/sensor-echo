@@ -1,12 +1,9 @@
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "main.h"
-#include "protocol.h"
 #include "tx/frame.h"
-#include "tx/header.h"
 #include "lidar/sys.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/core.h"
@@ -46,95 +43,85 @@ void initialize()
         // TODO set dma it and start scan
 }
 
-static size_t write_health_message(const ParserHealth* health, char* to, size_t capacity)
+void translate_device_info(int8_t* to, ParserDeviceInfo* info)
 {
-        if (health == NULL)
-                return 0u;
+        if (to == NULL || info == NULL)
+                return;
 
-        const char* status = health->health > 0u ? "FAULT" : "OK";
-        const char* format = "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X";
-        int length = snprintf(to, capacity, format, status, (unsigned)health->health);
-        if (length < 0 || (size_t)length + 2u > capacity)
-                return 0u;
-
-        to[length++] = '\r';
-        to[length++] = '\n';
-        return (size_t)length;
-}
-
-static void serial_to_hex(const ParserDeviceInfo* info, char serial[33])
-{
         static const char hex[] = "0123456789ABCDEF";
+        char              serial[SYS_PACKET_DEVICE_SERIAL_SIZE * 2u + 1u];
         for (size_t i = 0u; i < SYS_PACKET_DEVICE_SERIAL_SIZE; ++i) {
                 serial[i * 2u]      = hex[info->serial_number[i] >> 4u];
                 serial[i * 2u + 1u] = hex[info->serial_number[i] & 0x0fu];
         }
-        serial[32] = '\0';
-}
+        serial[SYS_PACKET_DEVICE_SERIAL_SIZE * 2u] = '\0';
 
-static size_t
-write_device_message(const ParserDeviceInfo* info, char* to, size_t capacity)
-{
-        if (info == NULL)
-                return 0u;
-
-        char serial[33];
-        serial_to_hex(info, serial);
-        const char* format = "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u "
-                             "hardware=%u serial=%s";
-        int         length = snprintf(
-                to,
-                capacity,
-                format,
+        (void)snprintf(
+                (char*)to,
+                CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE,
+                "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u "
+                "serial=%s\r\n",
                 (unsigned)info->model,
                 (unsigned)info->firmware_major,
                 (unsigned)info->firmware_minor,
                 (unsigned)info->hardware_version,
                 serial);
-        if (length < 0 || (size_t)length + 2u > capacity)
-                return 0u;
-
-        to[length++] = '\r';
-        to[length++] = '\n';
-        return (size_t)length;
 }
 
-size_t translate(
-        SysTypeCode             type,
-        const ParserHealth*     health,
-        const ParserDeviceInfo* device_info,
-        uint8_t*                to,
-        size_t                  to_capacity,
-        uint32_t                timestamp)
+void translate_health(int8_t* to, ParserHealth* health)
 {
-        if (to == NULL || to_capacity < TX_FRAME_HEADER_SIZE)
-                return 0u;
+        if (to == NULL || health == NULL)
+                return;
 
-        char*  payload          = (char*)(to + TX_FRAME_HEADER_SIZE);
-        size_t payload_capacity = to_capacity - TX_FRAME_HEADER_SIZE;
-        size_t payload_len      = 0u;
+        (void)snprintf(
+                (char*)to,
+                CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE,
+                "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X\r\n",
+                health->health > 0u ? "FAULT" : "OK",
+                (unsigned)health->health);
+}
 
-        switch (type) {
-                case SYS_TYPE_CODE_HEALTH:
-                        payload_len =
-                                write_health_message(health, payload, payload_capacity);
-                        break;
+/**
+ * @param from points to the head of buffer
+ * @param to points to the first field of the payload
+ * @return number of bytes written into to-buffer
+ */
+bool translate(int8_t* from, int8_t* to)
+{
+        int8_t* parser_head = from;
+
+        // parse frame header
+        ParserMeta meta = {0};
+        if (read_meta(to, CORE_RX_BUF_SIZE, &meta))
+                return false;
+
+        // increment pointer
+        parser_head += SYS_PACKET_HEADER_SIZE;
+
+        ParserDeviceInfo info;
+        ParserHealth     health;
+
+        // prase frame content
+        switch (meta.type_code) {
                 case SYS_TYPE_CODE_DEVICE_INFO:
-                        payload_len = write_device_message(
-                                device_info,
-                                payload,
-                                payload_capacity);
+                        info = (ParserDeviceInfo){0};
+                        read_device_info_frame(parser_head, &info);
+                        translate_device_info(to, &info);
                         break;
+
+                case SYS_TYPE_CODE_HEALTH:
+                        health = (ParserHealth){0};
+                        read_health_frame(parser_head, &health);
+                        translate_health(to, &health);
+                        break;
+
+                case SYS_TYPE_CODE_SCAN:
+                        read_scan_frame(parser_head, (ParserScannedPoint*)to);
+                        break;
+
                 default:
-                        return 0u;
+                        return false;
         }
 
-        if (payload_len == 0u || payload_len > UINT16_MAX)
-                return 0u;
-        return tx_frame_write_header(
-                to,
-                to_capacity,
-                (uint16_t)payload_len,
-                FRAME_TYPE_SYS,
-                timestamp);
+        return true;
 }

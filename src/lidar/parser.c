@@ -127,7 +127,10 @@ static bool health_parse(ParserHealth* this)
         return true;
 }
 
-static bool read_health_frame(const int8_t* buf, ParserHealth* health)
+/**
+ * @param buf points to health byte field
+ */
+bool read_health_frame(const int8_t* buf, ParserHealth* health)
 {
         if (health == NULL)
                 return false;
@@ -141,7 +144,7 @@ static bool read_health_frame(const int8_t* buf, ParserHealth* health)
 /**
  * DEVICE INFO
  */
-bool read_device_info_frame(const uint8_t* buf, ParserDeviceInfo* info)
+bool read_device_info_frame(const int8_t* buf, ParserDeviceInfo* info)
 {
         if (info)
                 return false;
