@@ -19,7 +19,21 @@ and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
 be written before the header. Payload length counts payload bytes only.
 
 ### System Message
-TODO
+
+System message payloads are ASCII text ending in `\r\n`, without a NUL byte.
+The payload starts immediately after the 10-byte TX header. Its length includes
+the two line-ending bytes.
+
+| LiDAR reply | PC system message payload |
+|---|---|
+| Health, status byte `0x00` | `[SENSOR-ECHO] LiDAR STATUS: OK \| code=0x00\r\n` |
+| Health, status byte above `0x00` | `[SENSOR-ECHO] LiDAR STATUS: FAULT \| code=0xNN\r\n` |
+| Device information | `[SENSOR-ECHO] LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |
+
+The health status is `FAULT` when any bit in the status byte is set. `NN` is the
+two-digit uppercase hexadecimal status byte. The device serial is the 16 raw
+serial-number bytes in sensor wire order, encoded as 32 uppercase hexadecimal
+digits. Model, firmware, and hardware values are unsigned decimal numbers.
 
 
 ### Lidar Frame payload 
