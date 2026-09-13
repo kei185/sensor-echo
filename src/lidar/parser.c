@@ -52,76 +52,56 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
  * @param len: length of the buffer
  * @return: pointer to the start sign in the buffer, or NULL if not found
  */
-static int8_t* find_start_sign(int8_t* buf, uint32_t len)
+static const int8_t* find_start_sign(const int8_t* buf, uint32_t len)
 {
-        uint32_t next_filed_idx = 0;
-
-        for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE ==
-                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
-                        break;
-
-        if (next_filed_idx >= len)
+        if (buf == NULL || len < SYS_PACKET_META_SIZE)
                 return NULL;
 
-        return buf + next_filed_idx;
+        for (uint32_t idx = 0; idx <= len - SYS_PACKET_META_SIZE; ++idx) {
+                if ((uint8_t)buf[idx] == SYS_PACKET_HEADER_MSB &&
+                    (uint8_t)buf[idx + 1] == SYS_PACKET_HEADER_LSB)
+                        return buf + idx;
+        }
+
+        return NULL;
 }
 
 /**
- * @brief read response length and response mode field and set them  ParserMeta
- * corresponding fields
- * @param buf: pointer to the buffer containing the response length byte field
- * @param rfm
+ * @brief Decode the response length and mode from an already-received descriptor.
+ * @param buf Pointer to the four-byte length/mode field.
+ * @param pm Parsed metadata to update.
  */
-static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
+static ParserMeta* read_res_len(const int8_t* buf, ParserMeta* pm)
 {
+        // The four-byte field is little-endian: its top two bits are the mode.
+        uint32_t len_mode = 0;
+        for (uint32_t i = 0; i < SYS_PACKET_LEN_MODE_SIZE; ++i)
+                len_mode |= (uint32_t)(uint8_t)buf[i] << (i * 8U);
 
-        pm->res_len = dec_little_endian(buf, SYS_PACKET_LEN_MODE_SIZE - 1);
-
-        int32_t last_byte = read_byte(buf + SYS_PACKET_LEN_MODE_SIZE - 1);
-        int8_t  rm        = last_byte & SYS_PACKET_MODE_BIT_MASK >> 6;
-        int32_t len       = last_byte & SYS_PACKET_LEN_BIT_MASK << 24;
-
-        set_res_mode(pm, rm);
-        pm->res_len |= len;
+        pm->res_len = len_mode & 0x3FFFFFFFU;
+        set_res_mode(pm, (uint8_t)(len_mode >> 30));
 
         return pm;
 }
 
-ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
+ParserMeta* read_meta(const int8_t* buf, uint32_t len, ParserMeta* rfm)
 {
-        int8_t* frame_head = find_start_sign(buf, len);
+        if (rfm == NULL)
+                return NULL;
+
+        const int8_t* frame_head = find_start_sign(buf, len);
         if (frame_head == NULL)
                 return NULL;
 
-        read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, rfm);
+        ParserMeta parsed = {0};
+        read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, &parsed);
 
-        int8_t tc = dec_little_endian(
-                frame_head + SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE,
-                SYS_PACKET_TYPE_CODE_SIZE);
+        uint8_t tc =
+                (uint8_t)frame_head[SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE];
+        set_type_code(&parsed, tc);
 
-        set_type_code(rfm, tc);
-
+        *rfm = parsed;
         return rfm;
-}
-
-/**
- * Health and device-info replies have fixed single-response descriptors.
- * Match their wire bytes directly so blocking RX does not depend on the DMA reader.
- */
-static const uint8_t* single_response_content(
-        const uint8_t* buf, uint32_t len, uint8_t content_size, SysTypeCode type_code)
-{
-        const uint8_t descriptor[SYS_PACKET_META_SIZE] =
-                {0xA5, 0x5A, content_size, 0x00, 0x00, 0x00, (uint8_t)type_code};
-
-        if (buf == NULL || len < SYS_PACKET_META_SIZE + content_size)
-                return NULL;
-
-        if (memcmp(buf, descriptor, sizeof(descriptor)) != 0)
-                return NULL;
-
-        return buf + SYS_PACKET_META_SIZE;
 }
 
 /**
@@ -145,15 +125,18 @@ bool health_parse(ParserHealth* this)
 
 bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
 {
-        const uint8_t* content = single_response_content(
-                buf,
-                len,
-                SYS_PACKET_HEALTH_CONTENT_SIZE,
-                SYS_TYPE_CODE_HEALTH);
-        if (content == NULL || health == NULL)
+        if (buf == NULL || health == NULL || len < SYS_PACKET_HEALTH_FRAME_SIZE)
                 return false;
 
-        ParserHealth parsed = {
+        ParserMeta meta;
+        if (read_meta((const int8_t*)buf, SYS_PACKET_META_SIZE, &meta) == NULL ||
+            meta.res_mode != SYS_RES_MODE_SINGLE ||
+            meta.type_code != SYS_TYPE_CODE_HEALTH ||
+            meta.res_len != SYS_PACKET_HEALTH_CONTENT_SIZE)
+                return false;
+
+        const uint8_t* content = buf + SYS_PACKET_META_SIZE;
+        ParserHealth   parsed  = {
                 .health = content[0],
         };
         health_parse(&parsed);
@@ -166,14 +149,17 @@ bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
  */
 bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
 {
-        const uint8_t* content = single_response_content(
-                buf,
-                len,
-                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
-                SYS_TYPE_CODE_DEVICE_INFO);
-        if (content == NULL || info == NULL)
+        if (buf == NULL || info == NULL || len < SYS_PACKET_DEVICE_INFO_FRAME_SIZE)
                 return false;
 
+        ParserMeta meta;
+        if (read_meta((const int8_t*)buf, SYS_PACKET_META_SIZE, &meta) == NULL ||
+            meta.res_mode != SYS_RES_MODE_SINGLE ||
+            meta.type_code != SYS_TYPE_CODE_DEVICE_INFO ||
+            meta.res_len != SYS_PACKET_DEVICE_INFO_CONTENT_SIZE)
+                return false;
+
+        const uint8_t* content = buf + SYS_PACKET_META_SIZE;
         // Manual section 3.3: firmware low byte is major, high byte is minor.
         ParserDeviceInfo parsed = {.model            = content[0],
                                    .firmware_major   = content[1],

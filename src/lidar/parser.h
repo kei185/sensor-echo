@@ -5,12 +5,13 @@
 
 typedef struct RxFrameMeta
 {
-        uint16_t    res_len;
+        uint32_t    res_len;
         SysResMode  res_mode;
         SysTypeCode type_code;
 } ParserMeta;
 
-ParserMeta* read_meta(int8_t*, uint32_t, ParserMeta*);
+/** Parse a complete descriptor from already-received bytes without waiting for DMA. */
+ParserMeta* read_meta(const int8_t*, uint32_t, ParserMeta*);
 
 typedef struct RxFrameHealth
 {
