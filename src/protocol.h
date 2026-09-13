@@ -9,7 +9,8 @@ extern bool rx_dma;
 extern bool tx_dma;
 
 void loop(void);
-/* Return payload bytes written, excluding any C-string terminator; zero on failure. */
+/* `to` needs CORE_TX_BUF_SIZE bytes. Return the complete PC frame size,
+ * or zero if translation fails. */
 size_t translate(int8_t* from, int8_t* to);
 
 #endif
