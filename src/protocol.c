@@ -51,7 +51,7 @@ void initialize()
         // TODO set dma it and start scan
 }
 
-size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
+static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
 {
         if (to == NULL || info == NULL)
                 return 0u;
@@ -82,7 +82,7 @@ size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
         return written < 0 || (size_t)written >= capacity ? 0u : (size_t)written;
 }
 
-size_t translate_health(int8_t* to, ParserHealth* health)
+static size_t translate_health(int8_t* to, ParserHealth* health)
 {
         if (to == NULL || health == NULL)
                 return 0u;
@@ -95,6 +95,38 @@ size_t translate_health(int8_t* to, ParserHealth* health)
                 health->health > 0u ? "FAULT" : "OK",
                 (unsigned)health->health);
         return written < 0 || (size_t)written >= capacity ? 0u : (size_t)written;
+}
+
+/*
+ * @param from points to  the head of the content  field
+ * @param to points to the head of the payload field
+ */
+static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type)
+{
+
+        ParserDeviceInfo info;
+        ParserHealth     health;
+
+        switch (type) {
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        info = (ParserDeviceInfo){0};
+                        if (!read_device_info_frame(from, &info))
+                                return 0u;
+                        return translate_device_info(to, &info);
+
+                case SYS_TYPE_CODE_HEALTH:
+                        health = (ParserHealth){0};
+                        if (!read_health_frame(from, &health))
+                                return 0u;
+                        return translate_health(to, &health);
+
+                case SYS_TYPE_CODE_SCAN:
+                        return (size_t)read_scan_frame(from, (ParserScannedPoint*)to) *
+                               sizeof(ParserScannedPoint);
+
+                default:
+                        return 0u;
+        }
 }
 
 /**
@@ -117,30 +149,12 @@ size_t translate(int8_t* from, int8_t* to)
         // increment pointer
         parser_head += SYS_PACKET_META_SIZE;
 
-        ParserDeviceInfo info;
-        ParserHealth     health;
+        int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
         // prase frame content
-        switch (meta.type_code) {
-                case SYS_TYPE_CODE_DEVICE_INFO:
-                        info = (ParserDeviceInfo){0};
-                        if (!read_device_info_frame(parser_head, &info))
-                                return 0u;
-                        return translate_device_info(to, &info);
+        size_t payload_length =
+                translate_frame_content(parser_head, writer_payload_head, meta.type_code);
 
-                case SYS_TYPE_CODE_HEALTH:
-                        health = (ParserHealth){0};
-                        if (!read_health_frame(parser_head, &health))
-                                return 0u;
-                        return translate_health(to, &health);
-
-                case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame(
-                                       parser_head,
-                                       (ParserScannedPoint*)to) *
-                               sizeof(ParserScannedPoint);
-
-                default:
-                        return 0u;
-        }
+        // TODO
+        // write tx frame header into to
 }
