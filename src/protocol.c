@@ -56,7 +56,7 @@ void translate_device_info(int8_t* to, ParserDeviceInfo* info)
         }
         serial[SYS_PACKET_DEVICE_SERIAL_SIZE * 2u] = '\0';
 
-        (void)snprintf(
+        snprintf(
                 (char*)to,
                 CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE,
                 "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u "
@@ -73,7 +73,7 @@ void translate_health(int8_t* to, ParserHealth* health)
         if (to == NULL || health == NULL)
                 return;
 
-        (void)snprintf(
+        snprintf(
                 (char*)to,
                 CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE,
                 "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X\r\n",
