@@ -5,7 +5,7 @@
 
 typedef struct RxFrameMeta
 {
-        uint16_t    res_len;
+        uint32_t    res_len;
         SysResMode  res_mode;
         SysTypeCode type_code;
 } ParserMeta;
@@ -48,9 +48,9 @@ typedef struct
         int8_t*  data_frame_head;
 } ParserScanMeta;
 
-ParserMeta* read_meta(int8_t*, uint32_t, ParserMeta*);
-bool        read_device_info_frame(const uint8_t*, ParserDeviceInfo*);
+ParserMeta* read_meta(const int8_t*, uint32_t, ParserMeta*);
+bool        read_health_frame(const int8_t*, ParserHealth*);
+bool        read_device_info_frame(const int8_t*, ParserDeviceInfo*);
 uint32_t    read_scan_frame(int8_t*, ParserScannedPoint*);
-bool        read_device_info_frame(const uint8_t*, ParserDeviceInfo*);
 
 #endif /* LIDAR_PARSER_H */

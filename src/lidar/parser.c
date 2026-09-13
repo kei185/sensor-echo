@@ -1,7 +1,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "lidar/parser.h"
@@ -52,19 +51,18 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
  * @param len: length of the buffer
  * @return: pointer to the start sign in the buffer, or NULL if not found
  */
-static int8_t* find_start_sign(int8_t* buf, uint32_t len)
+static const int8_t* find_start_sign(const int8_t* buf, uint32_t len)
 {
-        uint32_t next_filed_idx = 0;
-
-        for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE ==
-                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
-                        break;
-
-        if (next_filed_idx >= len)
+        if (buf == NULL || len < SYS_PACKET_META_SIZE)
                 return NULL;
 
-        return buf + next_filed_idx;
+        for (uint32_t i = 0; i <= len - SYS_PACKET_META_SIZE; ++i) {
+                if ((uint8_t)read_byte(buf + i) == SYS_PACKET_HEADER_MSB &&
+                    (uint8_t)read_byte(buf + i + 1u) == SYS_PACKET_HEADER_LSB)
+                        return buf + i;
+        }
+
+        return NULL;
 }
 
 /**
@@ -73,17 +71,11 @@ static int8_t* find_start_sign(int8_t* buf, uint32_t len)
  * @param buf: pointer to the buffer containing the response length byte field
  * @param rfm
  */
-static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
+static ParserMeta* read_res_len(const int8_t* buf, ParserMeta* pm)
 {
-
-        pm->res_len = dec_little_endian(buf, SYS_PACKET_LEN_MODE_SIZE - 1);
-
-        int32_t last_byte = read_byte(buf + SYS_PACKET_LEN_MODE_SIZE - 1);
-        int8_t  rm        = last_byte & SYS_PACKET_MODE_BIT_MASK >> 6;
-        int32_t len       = last_byte & SYS_PACKET_LEN_BIT_MASK << 24;
-
-        set_res_mode(pm, rm);
-        pm->res_len |= len;
+        uint32_t length_and_mode = dec_little_endian(buf, SYS_PACKET_LEN_MODE_SIZE);
+        pm->res_len              = length_and_mode & 0x3fffffffu;
+        set_res_mode(pm, (uint8_t)(length_and_mode >> 30));
 
         return pm;
 }
@@ -91,19 +83,21 @@ static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
 /**
  * @return NULL if the start of frame  not found
  */
-ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
+ParserMeta* read_meta(const int8_t* buf, uint32_t len, ParserMeta* rfm)
 {
-        int8_t* frame_head = find_start_sign(buf, len);
-        if (frame_head == NULL)
+        const int8_t* frame_head = find_start_sign(buf, len);
+        if (frame_head == NULL || rfm == NULL)
                 return NULL;
 
-        read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, rfm);
+        ParserMeta parsed = {0};
+        read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, &parsed);
 
-        int8_t tc = dec_little_endian(
+        uint8_t tc = (uint8_t)dec_little_endian(
                 frame_head + SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE,
                 SYS_PACKET_TYPE_CODE_SIZE);
 
-        set_type_code(rfm, tc);
+        set_type_code(&parsed, tc);
+        *rfm = parsed;
 
         return rfm;
 }
@@ -112,50 +106,48 @@ ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
  * HEALTH
  */
 
-static bool health_parse(ParserHealth* this)
+static void health_parse(ParserHealth* this)
 {
-        if (this->health == 0U)
-                return false;
-
         this->sensor_abnormal         = (this->health & (1U << 0)) != 0U;
         this->encoder_abnormal        = (this->health & (1U << 1)) != 0U;
         this->wireless_power_abnormal = (this->health & (1U << 2)) != 0U;
         this->laser_feedback_abnormal = (this->health & (1U << 3)) != 0U;
         this->laser_drive_abnormal    = (this->health & (1U << 4)) != 0U;
         this->lidar_data_abnormal     = (this->health & (1U << 5)) != 0U;
-
-        return true;
 }
 
-static bool read_health_frame(const int8_t* buf, ParserHealth* health)
+bool read_health_frame(const int8_t* buf, ParserHealth* health)
 {
-        if (health == NULL)
+        if (buf == NULL || health == NULL)
                 return false;
 
-        health->health = (uint8_t)read_byte(buf);
-
-        health_parse(health);
+        ParserHealth parsed = {.health = (uint8_t)read_byte(buf)};
+        health_parse(&parsed);
+        *health = parsed;
         return true;
 }
 
 /**
  * DEVICE INFO
  */
-bool read_device_info_frame(const uint8_t* buf, ParserDeviceInfo* info)
+bool read_device_info_frame(const int8_t* buf, ParserDeviceInfo* info)
 {
-        if (info)
+        if (buf == NULL || info == NULL)
                 return false;
 
+        ParserDeviceInfo parsed = {0};
         // Manual section 3.3: firmware low byte is major, high byte is minor.
-        info->model            = buf[0];
-        info->firmware_major   = buf[1];
-        info->firmware_minor   = buf[2];
-        info->hardware_version = buf[3];
+        parsed.model            = (uint8_t)read_byte(buf);
+        parsed.firmware_major   = (uint8_t)read_byte(buf + 1u);
+        parsed.firmware_minor   = (uint8_t)read_byte(buf + 2u);
+        parsed.hardware_version = (uint8_t)read_byte(buf + 3u);
         // Preserve the serial bytes in wire order; no integer endian conversion.
-        memcpy(info->serial_number, buf + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
+        for (uint32_t i = 0; i < SYS_PACKET_DEVICE_SERIAL_SIZE; ++i)
+                parsed.serial_number[i] = (uint8_t)read_byte(buf + 4u + i);
 
+        *info = parsed;
         return true;
-};
+}
 
 /**
  * SCAN

@@ -19,7 +19,27 @@ and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
 be written before the header. Payload length counts payload bytes only.
 
 ### System Message
-TODO
+
+The payload is an ASCII line ending in `\r\n`, with no terminating NUL byte.
+The frame type is `0x00`. Status replies report the raw status code and the
+decoded state of all six monitored modules. `OK` means the entire status byte
+is zero; `FAULT` means at least one status bit is set, including a reserved bit.
+
+```text
+[SENSOR-ECHO] LiDAR STATUS: OK | code=0x00 | sensor=OK encoder=OK wireless=OK feedback=OK laser=OK data=OK
+[SENSOR-ECHO] LiDAR STATUS: FAULT | code=0x09 | sensor=FAULT encoder=OK wireless=OK feedback=FAULT laser=OK data=OK
+```
+
+Device information reports the model, firmware major and minor versions,
+hardware version, and the 16 serial-number bytes as 32 uppercase hexadecimal
+digits in sensor wire order.
+
+```text
+[SENSOR-ECHO] LiDAR DEVICE IDENTIFIED | model=151 firmware=1.2 hardware=3 serial=00112233445566778899AABBCCDDEEFF
+```
+
+The payload length includes the final `\r\n` bytes. Responses with an invalid
+descriptor, incomplete content, or an unsupported type produce no PC frame.
 
 
 ### Lidar Frame payload 
