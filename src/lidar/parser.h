@@ -10,7 +10,7 @@ typedef struct RxFrameMeta
         SysTypeCode type_code;
 } ParserMeta;
 
-/** Parse a complete descriptor from already-received bytes without waiting for DMA. */
+/** Parse a complete descriptor through read_byte() from the active RX_BUF. */
 ParserMeta* read_meta(const int8_t*, uint32_t, ParserMeta*);
 
 typedef struct RxFrameHealth
@@ -28,8 +28,8 @@ bool health_parse(ParserHealth*);
 
 /**
  * Parse a complete single-response frame starting at buf (including its 7-byte
- * descriptor). The bytes must already be received; these functions do not wait for UART
- * or DMA. Return true on successful parsing, including a healthy status of zero. Return
+ * descriptor). The caller must make these bytes readable through read_byte().
+ * Return true on successful parsing, including a healthy status of zero. Return
  * false for an incomplete or mismatched frame, leaving the output unchanged.
  */
 bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health);
@@ -45,6 +45,19 @@ typedef struct RxFrameDeviceInfo
 } ParserDeviceInfo;
 
 bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info);
+
+typedef struct
+{
+        ParserMeta meta;
+        union
+        {
+                ParserHealth     health;
+                ParserDeviceInfo device_info;
+        } content;
+} ParserSingleReply;
+
+/** Read the descriptor, then dispatch to the matching single-reply content parser. */
+bool parse_single_response(const int8_t* buf, uint32_t len, ParserSingleReply* reply);
 
 typedef struct ScannedPoint
 {

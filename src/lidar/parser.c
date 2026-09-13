@@ -1,7 +1,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "lidar/parser.h"
@@ -9,6 +8,12 @@
 /**
  * META
  */
+
+static uint8_t read_frame_byte(const int8_t* buf)
+{
+        // read_byte only observes RX_BUF; its current interface is non-const.
+        return (uint8_t)read_byte((int8_t*)buf);
+}
 
 static ParserMeta* set_res_mode(ParserMeta* pm, uint8_t rm)
 {
@@ -58,8 +63,8 @@ static const int8_t* find_start_sign(const int8_t* buf, uint32_t len)
                 return NULL;
 
         for (uint32_t idx = 0; idx <= len - SYS_PACKET_META_SIZE; ++idx) {
-                if ((uint8_t)buf[idx] == SYS_PACKET_HEADER_MSB &&
-                    (uint8_t)buf[idx + 1] == SYS_PACKET_HEADER_LSB)
+                if (read_frame_byte(buf + idx) == SYS_PACKET_HEADER_MSB &&
+                    read_frame_byte(buf + idx + 1) == SYS_PACKET_HEADER_LSB)
                         return buf + idx;
         }
 
@@ -67,16 +72,14 @@ static const int8_t* find_start_sign(const int8_t* buf, uint32_t len)
 }
 
 /**
- * @brief Decode the response length and mode from an already-received descriptor.
+ * @brief Decode the response length and mode from a ready RX buffer.
  * @param buf Pointer to the four-byte length/mode field.
  * @param pm Parsed metadata to update.
  */
 static ParserMeta* read_res_len(const int8_t* buf, ParserMeta* pm)
 {
         // The four-byte field is little-endian: its top two bits are the mode.
-        uint32_t len_mode = 0;
-        for (uint32_t i = 0; i < SYS_PACKET_LEN_MODE_SIZE; ++i)
-                len_mode |= (uint32_t)(uint8_t)buf[i] << (i * 8U);
+        uint32_t len_mode = dec_little_endian((int8_t*)buf, SYS_PACKET_LEN_MODE_SIZE);
 
         pm->res_len = len_mode & 0x3FFFFFFFU;
         set_res_mode(pm, (uint8_t)(len_mode >> 30));
@@ -96,8 +99,8 @@ ParserMeta* read_meta(const int8_t* buf, uint32_t len, ParserMeta* rfm)
         ParserMeta parsed = {0};
         read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, &parsed);
 
-        uint8_t tc =
-                (uint8_t)frame_head[SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE];
+        uint8_t tc = read_frame_byte(
+                frame_head + SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE);
         set_type_code(&parsed, tc);
 
         *rfm = parsed;
@@ -123,51 +126,93 @@ bool health_parse(ParserHealth* this)
         return true;
 }
 
-bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
+static void read_health_content(const int8_t* content, ParserHealth* health)
 {
-        if (buf == NULL || health == NULL || len < SYS_PACKET_HEALTH_FRAME_SIZE)
-                return false;
-
-        ParserMeta meta;
-        if (read_meta((const int8_t*)buf, SYS_PACKET_META_SIZE, &meta) == NULL ||
-            meta.res_mode != SYS_RES_MODE_SINGLE ||
-            meta.type_code != SYS_TYPE_CODE_HEALTH ||
-            meta.res_len != SYS_PACKET_HEALTH_CONTENT_SIZE)
-                return false;
-
-        const uint8_t* content = buf + SYS_PACKET_META_SIZE;
-        ParserHealth   parsed  = {
-                .health = content[0],
+        ParserHealth parsed = {
+                .health = read_frame_byte(content),
         };
         health_parse(&parsed);
         *health = parsed;
-        return true;
 }
 
 /**
  * DEVICE INFO
  */
-bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
+static void read_device_info_content(const int8_t* content, ParserDeviceInfo* info)
 {
-        if (buf == NULL || info == NULL || len < SYS_PACKET_DEVICE_INFO_FRAME_SIZE)
+        // Manual section 3.3: firmware low byte is major, high byte is minor.
+        ParserDeviceInfo parsed = {.model            = read_frame_byte(content),
+                                   .firmware_major   = read_frame_byte(content + 1),
+                                   .firmware_minor   = read_frame_byte(content + 2),
+                                   .hardware_version = read_frame_byte(content + 3)};
+        // Preserve the serial bytes in wire order; no integer endian conversion.
+        for (uint32_t i = 0; i < SYS_PACKET_DEVICE_SERIAL_SIZE; ++i)
+                parsed.serial_number[i] = read_frame_byte(content + 4 + i);
+        *info = parsed;
+}
+
+bool parse_single_response(const int8_t* buf, uint32_t len, ParserSingleReply* reply)
+{
+        if (buf == NULL || reply == NULL || len < SYS_PACKET_META_SIZE)
                 return false;
 
         ParserMeta meta;
-        if (read_meta((const int8_t*)buf, SYS_PACKET_META_SIZE, &meta) == NULL ||
-            meta.res_mode != SYS_RES_MODE_SINGLE ||
-            meta.type_code != SYS_TYPE_CODE_DEVICE_INFO ||
-            meta.res_len != SYS_PACKET_DEVICE_INFO_CONTENT_SIZE)
+        if (read_meta(buf, SYS_PACKET_META_SIZE, &meta) == NULL ||
+            meta.res_mode != SYS_RES_MODE_SINGLE)
                 return false;
 
-        const uint8_t* content = buf + SYS_PACKET_META_SIZE;
-        // Manual section 3.3: firmware low byte is major, high byte is minor.
-        ParserDeviceInfo parsed = {.model            = content[0],
-                                   .firmware_major   = content[1],
-                                   .firmware_minor   = content[2],
-                                   .hardware_version = content[3]};
-        // Preserve the serial bytes in wire order; no integer endian conversion.
-        memcpy(parsed.serial_number, content + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
-        *info = parsed;
+        uint32_t content_size;
+        switch (meta.type_code) {
+                case SYS_TYPE_CODE_HEALTH:
+                        content_size = SYS_PACKET_HEALTH_CONTENT_SIZE;
+                        break;
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        content_size = SYS_PACKET_DEVICE_INFO_CONTENT_SIZE;
+                        break;
+                default:
+                        return false;
+        }
+
+        uint32_t frame_size = SYS_PACKET_META_SIZE + content_size;
+        if (meta.res_len != content_size || len < frame_size)
+                return false;
+
+        ParserSingleReply parsed  = {.meta = meta};
+        const int8_t*     content = buf + SYS_PACKET_META_SIZE;
+        if (meta.type_code == SYS_TYPE_CODE_HEALTH)
+                read_health_content(content, &parsed.content.health);
+        else
+                read_device_info_content(content, &parsed.content.device_info);
+
+        *reply = parsed;
+        return true;
+}
+
+bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
+{
+        if (health == NULL)
+                return false;
+
+        ParserSingleReply reply;
+        if (!parse_single_response((const int8_t*)buf, len, &reply) ||
+            reply.meta.type_code != SYS_TYPE_CODE_HEALTH)
+                return false;
+
+        *health = reply.content.health;
+        return true;
+}
+
+bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
+{
+        if (info == NULL)
+                return false;
+
+        ParserSingleReply reply;
+        if (!parse_single_response((const int8_t*)buf, len, &reply) ||
+            reply.meta.type_code != SYS_TYPE_CODE_DEVICE_INFO)
+                return false;
+
+        *info = reply.content.device_info;
         return true;
 }
 
