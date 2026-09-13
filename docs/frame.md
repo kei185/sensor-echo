@@ -36,8 +36,10 @@ serial-number bytes in sensor wire order, encoded as 32 uppercase hexadecimal
 digits. Model, firmware, and hardware values are unsigned decimal numbers.
 
 
-### Lidar Frame payload 
-size: 8 Byte * point number
+### LiDAR frame payload
+
+Size: 4 bytes per point (2 bytes for distance and 2 bytes for angle).
+
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 
@@ -49,6 +51,9 @@ packet
 The angle value is degrees multiplied by 64; for example, 45.5° is 2912.
 Angles rotate clockwise from the LiDAR's zero direction. The encoded range is
 0..23039; 360° wraps to zero.
+
+The planned TX buffer layout and LiDAR throughput estimate are described in
+[protocol.md](protocol.md).
 
 
 ### IMU Frame payload 
