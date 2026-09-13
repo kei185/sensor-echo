@@ -20,26 +20,20 @@ be written before the header. Payload length counts payload bytes only.
 
 ### System Message
 
-The payload is an ASCII line ending in `\r\n`, with no terminating NUL byte.
-The frame type is `0x00`. Status replies report the raw status code and the
-decoded state of all six monitored modules. `OK` means the entire status byte
-is zero; `FAULT` means at least one status bit is set, including a reserved bit.
+System message payloads are ASCII text ending in `\r\n`, without a NUL byte.
+The payload starts immediately after the 10-byte TX header. Its length includes
+the two line-ending bytes.
 
-```text
-[SENSOR-ECHO] LiDAR STATUS: OK | code=0x00 | sensor=OK encoder=OK wireless=OK feedback=OK laser=OK data=OK
-[SENSOR-ECHO] LiDAR STATUS: FAULT | code=0x09 | sensor=FAULT encoder=OK wireless=OK feedback=FAULT laser=OK data=OK
-```
+| LiDAR reply | PC system message payload |
+|---|---|
+| Health, status byte `0x00` | `[SENSOR-ECHO] LiDAR STATUS: OK \| code=0x00\r\n` |
+| Health, status byte above `0x00` | `[SENSOR-ECHO] LiDAR STATUS: FAULT \| code=0xNN\r\n` |
+| Device information | `[SENSOR-ECHO] LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |
 
-Device information reports the model, firmware major and minor versions,
-hardware version, and the 16 serial-number bytes as 32 uppercase hexadecimal
-digits in sensor wire order.
-
-```text
-[SENSOR-ECHO] LiDAR DEVICE IDENTIFIED | model=151 firmware=1.2 hardware=3 serial=00112233445566778899AABBCCDDEEFF
-```
-
-The payload length includes the final `\r\n` bytes. Responses with an invalid
-descriptor, incomplete content, or an unsupported type produce no PC frame.
+The health status is `FAULT` when any bit in the status byte is set. `NN` is the
+two-digit uppercase hexadecimal status byte. The device serial is the 16 raw
+serial-number bytes in sensor wire order, encoded as 32 uppercase hexadecimal
+digits. Model, firmware, and hardware values are unsigned decimal numbers.
 
 
 ### Lidar Frame payload 

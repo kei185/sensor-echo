@@ -40,8 +40,7 @@ add_subdirectory(cmake/stm32cubemx)
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     src/motor.c
-    src/protocol.c
-    src/protocol_translate.c
+    src/init.c
     src/lidar/parser.c
     src/lidar/lidar.c
     src/lidar/sys.c
