@@ -88,6 +88,9 @@ static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
         return pm;
 }
 
+/**
+ * @return NULL if the start of frame  not found
+ */
 ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
 {
         int8_t* frame_head = find_start_sign(buf, len);
@@ -106,29 +109,10 @@ ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
 }
 
 /**
- * Health and device-info replies have fixed single-response descriptors.
- * Match their wire bytes directly so blocking RX does not depend on the DMA reader.
- */
-static const uint8_t* single_response_content(
-        const uint8_t* buf, uint32_t len, uint8_t content_size, SysTypeCode type_code)
-{
-        const uint8_t descriptor[SYS_PACKET_META_SIZE] =
-                {0xA5, 0x5A, content_size, 0x00, 0x00, 0x00, (uint8_t)type_code};
-
-        if (buf == NULL || len < SYS_PACKET_META_SIZE + content_size)
-                return NULL;
-
-        if (memcmp(buf, descriptor, sizeof(descriptor)) != 0)
-                return NULL;
-
-        return buf + SYS_PACKET_META_SIZE;
-}
-
-/**
  * HEALTH
  */
 
-bool health_parse(ParserHealth* this)
+static bool health_parse(ParserHealth* this)
 {
         if (this->health == 0U)
                 return false;
@@ -143,55 +127,39 @@ bool health_parse(ParserHealth* this)
         return true;
 }
 
-bool read_health_frame(const uint8_t* buf, uint32_t len, ParserHealth* health)
+static bool read_health_frame(const int8_t* buf, ParserHealth* health)
 {
-        const uint8_t* content = single_response_content(
-                buf,
-                len,
-                SYS_PACKET_HEALTH_CONTENT_SIZE,
-                SYS_TYPE_CODE_HEALTH);
-        if (content == NULL || health == NULL)
+        if (health == NULL)
                 return false;
 
-        ParserHealth parsed = {
-                .health = content[0],
-        };
-        health_parse(&parsed);
-        *health = parsed;
+        health->health = (uint8_t)read_byte(buf);
+
+        health_parse(health);
         return true;
 }
 
 /**
  * DEVICE INFO
  */
-bool read_device_info_frame(const uint8_t* buf, uint32_t len, ParserDeviceInfo* info)
+bool read_device_info_frame(const uint8_t* buf, ParserDeviceInfo* info)
 {
-        const uint8_t* content = single_response_content(
-                buf,
-                len,
-                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
-                SYS_TYPE_CODE_DEVICE_INFO);
-        if (content == NULL || info == NULL)
+        if (info)
                 return false;
 
         // Manual section 3.3: firmware low byte is major, high byte is minor.
-        ParserDeviceInfo parsed = {.model            = content[0],
-                                   .firmware_major   = content[1],
-                                   .firmware_minor   = content[2],
-                                   .hardware_version = content[3]};
+        info->model            = buf[0];
+        info->firmware_major   = buf[1];
+        info->firmware_minor   = buf[2];
+        info->hardware_version = buf[3];
         // Preserve the serial bytes in wire order; no integer endian conversion.
-        memcpy(parsed.serial_number, content + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
-        *info = parsed;
+        memcpy(info->serial_number, buf + 4, SYS_PACKET_DEVICE_SERIAL_SIZE);
+
         return true;
-}
+};
 
 /**
  * SCAN
  */
-static ParserScanMeta scanMeta = {
-        .start_angle = 0, .end_angle = 0, .data_num = 0, .data_frame_head = NULL};
-
-const ParserScanMeta* const PARSER_SCAN_META = &scanMeta;
 
 /**
  * @param buf supposed to point to packet header fields
@@ -297,6 +265,11 @@ uint32_t read_scan_frame(int8_t* buf, ParserScannedPoint* points)
         // read ct
         bool isf = is_start_frame(frame_head);
         frame_head += SYS_PACKET_SCAN_CT_SIZE;
+
+        ParserScanMeta scanMeta = {.start_angle     = 0,
+                                   .end_angle       = 0,
+                                   .data_num        = 0,
+                                   .data_frame_head = NULL};
 
         // read data num
         scanMeta.data_num = read_qty(buf);

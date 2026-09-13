@@ -17,9 +17,9 @@ typedef struct RxBuf
 extern const RxBuf* const RX_BUF;
 
 int8_t*  cur_buf(void);
-bool     is_safe_read(int8_t* buf, uint32_t l);
-int8_t   read_byte(int8_t* buf);
-uint32_t dec_little_endian(int8_t* buf, uint8_t len);
+bool     is_safe_read(const int8_t*, uint32_t);
+int8_t   read_byte(const int8_t*);
+uint32_t dec_little_endian(const int8_t*, uint8_t);
 
 #define CORE_TX_BUF_SIZE 1024u // TODO: バッファサイズを確定する
 #define CORE_TX_BUF_NUM  2u    // use DMA as double buffer

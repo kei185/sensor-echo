@@ -1,5 +1,5 @@
-#ifndef LOOP_H
-#define LOOP_H
+#ifndef PROTOCOL_H
+#define PROTOCOL_H
 #include <stdbool.h>
 
 extern bool rx_dma;
