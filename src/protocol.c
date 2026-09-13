@@ -42,7 +42,17 @@ void initialize()
         // TODO set dma it and start scan
 }
 
+void translate_device_info(int8_t* to, ParserDeviceInfo* info)
+{ // todo
+}
+
+void translate_health(int8_t* to, ParserHealth* health)
+{ // todo
+}
+
 /**
+ * @param from points to the head of buffer
+ * @param to points to the first field of the payload
  * @return number of bytes written into to-buffer
  */
 bool translate(int8_t* from, int8_t* to)
@@ -57,15 +67,26 @@ bool translate(int8_t* from, int8_t* to)
         // increment pointer
         parser_head += SYS_PACKET_HEADER_SIZE;
 
+        ParserDeviceInfo info;
+        ParserHealth     health;
+
         // prase frame content
         switch (meta.type_code) {
-                        // case SYS_TYPE_CODE_DEVICE_INFO:
-                        //         return read_device_info_frame();
-                        // case SYS_TYPE_CODE_HEALTH:
-                        //         return read_health_frame();
-                        // case SYS_TYPE_CODE_SCAN:
-                        //         return read_scan_frame(parser_head,
-                        //         (ParserScannedPoint*)to);
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        info = (ParserDeviceInfo){0};
+                        read_device_info_frame(parser_head, &info);
+                        translate_device_info(to, &info);
+                        break;
+
+                case SYS_TYPE_CODE_HEALTH:
+                        health = (ParserHealth){0};
+                        read_health_frame(parser_head, &health);
+                        translate_health(to, &health);
+                        break;
+
+                case SYS_TYPE_CODE_SCAN:
+                        read_scan_frame(parser_head, (ParserScannedPoint*)to);
+                        break;
 
                 default:
                         return false;
