@@ -43,9 +43,9 @@ typedef struct ScannedPoint
 
 typedef struct
 {
-        uint16_t start_angle; // decoded sensor angle in Q6 degrees
-        uint16_t end_angle;   // decoded sensor angle in Q6 degrees
-        uint8_t  data_num;    // one-byte LSN field
+        uint16_t       start_angle; // decoded sensor angle in Q6 degrees
+        uint16_t       end_angle;   // decoded sensor angle in Q6 degrees
+        uint8_t        data_num;    // one-byte LSN field
         const uint8_t* data_frame_head;
 } ParserScanMeta;
 
@@ -53,7 +53,7 @@ ParserMeta* read_meta(int8_t*, uint32_t, ParserMeta*);
 bool        read_health_frame(const int8_t*, ParserHealth*);
 // Write four little-endian payload bytes per point from one AA 55 packet.
 // Return the point count, or zero if input is invalid or output is too small.
-size_t      read_scan_frame(const uint8_t*, size_t, uint8_t*, size_t);
-bool        read_device_info_frame(const int8_t*, ParserDeviceInfo*);
+size_t read_scan_frame(const uint8_t*, size_t, uint8_t*, size_t);
+bool   read_device_info_frame(const int8_t*, ParserDeviceInfo*);
 
 #endif /* LIDAR_PARSER_H */

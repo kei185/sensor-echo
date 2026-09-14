@@ -130,12 +130,11 @@ static uint16_t dma_write_position(DMA_HandleTypeDef* dma)
         return (uint16_t)((PROBE_RX_RING_SIZE - remaining) % PROBE_RX_RING_SIZE);
 }
 
-static void
-drain_ring(
+static void drain_ring(
         DMA_HandleTypeDef* dma,
         uint16_t*          read_position,
         LidarScanMeter*    meter,
-        ConversionStats*  conversion)
+        ConversionStats*   conversion)
 {
         // Take one snapshot of DMA's write position, then consume every new
         // byte up to that position. read_position persists across polls.
@@ -143,9 +142,8 @@ drain_ring(
         // Keep the DMA position read ordered before the following buffer reads.
         __DMB();
         if (meter != NULL) {
-                uint32_t unread =
-                        (write_position + PROBE_RX_RING_SIZE - *read_position) %
-                        PROBE_RX_RING_SIZE;
+                uint32_t unread = (write_position + PROBE_RX_RING_SIZE - *read_position) %
+                                  PROBE_RX_RING_SIZE;
                 if (unread > conversion->max_unread_bytes)
                         conversion->max_unread_bytes = unread;
         }
@@ -156,8 +154,8 @@ drain_ring(
                         // Time the same scan converter used by normal TX code.
                         // Only the destination is different: the next packet
                         // overwrites this scratch frame.
-                        uint32_t start = DWT->CYCCNT;
-                        size_t frame_len = tx_scan_frame_write(
+                        uint32_t start     = DWT->CYCCNT;
+                        size_t   frame_len = tx_scan_frame_write(
                                 meter->packet,
                                 meter->packet_length,
                                 tx_trash,
@@ -182,12 +180,12 @@ drain_ring(
 }
 
 static void print_result(
-        UART_HandleTypeDef*   pc,
-        const LidarScanMeter* meter,
+        UART_HandleTypeDef*    pc,
+        const LidarScanMeter*  meter,
         const ConversionStats* conversion,
-        uint32_t              duration_ms,
-        uint32_t              max_poll_gap_ms,
-        uint32_t              uart_error)
+        uint32_t               duration_ms,
+        uint32_t               max_poll_gap_ms,
+        uint32_t               uart_error)
 {
         char line[240];
         // Convert counts over duration_ms into per-second rates. Use 64-bit
@@ -236,21 +234,17 @@ static void print_result(
 }
 
 static void print_conversion_result(
-        UART_HandleTypeDef*    pc,
-        const ConversionStats* conversion,
-        uint32_t               core_hz)
+        UART_HandleTypeDef* pc, const ConversionStats* conversion, uint32_t core_hz)
 {
-        char line[192];
-        uint32_t cycles_per_point =
-                conversion->converted_points == 0u
-                        ? 0u
-                        : (uint32_t)(conversion->total_cycles /
-                                     conversion->converted_points);
+        char     line[192];
+        uint32_t cycles_per_point = conversion->converted_points == 0u
+                                            ? 0u
+                                            : (uint32_t)(conversion->total_cycles /
+                                                         conversion->converted_points);
         uint32_t max_frame_us =
-                core_hz == 0u
-                        ? 0u
-                        : (uint32_t)((uint64_t)conversion->max_frame_cycles * 1000000u /
-                                     core_hz);
+                core_hz == 0u ? 0u
+                              : (uint32_t)((uint64_t)conversion->max_frame_cycles *
+                                           1000000u / core_hz);
         int written = snprintf(
                 line,
                 sizeof(line),
@@ -318,12 +312,12 @@ void lidar_rate_probe_run(UART_HandleTypeDef* lidar, UART_HandleTypeDef* pc)
                 return;
         }
 
-        uint16_t       read_position   = 0u;
-        uint32_t       warmup_start    = HAL_GetTick();
-        uint32_t       previous_poll   = warmup_start;
-        uint32_t       max_poll_gap_ms = 0u;
+        uint16_t              read_position   = 0u;
+        uint32_t              warmup_start    = HAL_GetTick();
+        uint32_t              previous_poll   = warmup_start;
+        uint32_t              max_poll_gap_ms = 0u;
         static LidarScanMeter meter;
-        ConversionStats        conversion = {0};
+        ConversionStats       conversion = {0};
 
         // Let the motor settle for one second. Keep draining DMA so the ring
         // cannot fill while those startup bytes are deliberately ignored.

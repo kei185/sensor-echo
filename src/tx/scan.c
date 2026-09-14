@@ -15,16 +15,15 @@ size_t tx_scan_frame_write(
         if (packet == NULL || tx_buf == NULL || packet_len < SYS_PACKET_SCAN_FIXED_SIZE)
                 return 0u;
 
-        const uint8_t lsn =
-                packet[SYS_PACKET_SCAN_HEADER_SIZE + SYS_PACKET_SCAN_CT_SIZE];
-        const size_t payload_len = (size_t)lsn * sizeof(ParserScannedPoint);
+        const uint8_t lsn = packet[SYS_PACKET_SCAN_HEADER_SIZE + SYS_PACKET_SCAN_CT_SIZE];
+        const size_t  payload_len = (size_t)lsn * sizeof(ParserScannedPoint);
         if (lsn == 0u || tx_capacity < TX_FRAME_HEADER_SIZE + payload_len ||
-            packet_len < SYS_PACKET_SCAN_FIXED_SIZE +
-                                 (size_t)lsn * SYS_PACKET_POINT_DATA_SIZE)
+            packet_len <
+                    SYS_PACKET_SCAN_FIXED_SIZE + (size_t)lsn * SYS_PACKET_POINT_DATA_SIZE)
                 return 0u;
 
         uint8_t* payload = tx_buf + TX_FRAME_HEADER_SIZE;
-        size_t points = read_scan_frame(packet, packet_len, payload, payload_len);
+        size_t   points  = read_scan_frame(packet, packet_len, payload, payload_len);
         if (points != lsn)
                 return 0u;
 

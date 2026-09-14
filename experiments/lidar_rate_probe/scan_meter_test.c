@@ -13,12 +13,15 @@ static void feed_packet(LidarScanMeter* meter, uint8_t ct, uint8_t lsn)
         // Put AA 55 inside the body to prove it is skipped as point data,
         // not mistaken for the start of another packet.
         for (uint16_t i = 0u; i < 6u + 3u * lsn; ++i) {
-                bool complete =
-                        lidar_scan_meter_feed(meter, i == 0u ? 0xaau : i == 1u ? 0x55u : 0u);
+                bool complete = lidar_scan_meter_feed(
+                        meter,
+                        i == 0u   ? 0xaau
+                        : i == 1u ? 0x55u
+                                  : 0u);
                 assert(complete == (i == 5u + 3u * lsn));
         }
-        assert(meter->packet_length == SYS_PACKET_SCAN_FIXED_SIZE +
-                                               lsn * SYS_PACKET_POINT_DATA_SIZE);
+        assert(meter->packet_length ==
+               SYS_PACKET_SCAN_FIXED_SIZE + lsn * SYS_PACKET_POINT_DATA_SIZE);
         assert(meter->packet[0] == 0xaau && meter->packet[1] == 0x55u);
         assert(meter->packet[SYS_PACKET_SCAN_FIXED_SIZE] == 0u);
 }

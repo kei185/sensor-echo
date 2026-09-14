@@ -61,7 +61,7 @@ bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
                         if (byte == 0xaau) {
                                 meter->packet[0]     = byte;
                                 meter->packet_length = 1u;
-                                meter->state = SEEK_SECOND_HEADER_BYTE;
+                                meter->state         = SEEK_SECOND_HEADER_BYTE;
                         }
                         break;
 
@@ -70,17 +70,17 @@ bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
                         if (byte == 0x55u) {
                                 meter->packet[1]     = byte;
                                 meter->packet_length = 2u;
-                                meter->state = READ_CT;
+                                meter->state         = READ_CT;
                         } else if (byte != 0xaau) {
                                 meter->packet_length = 0u;
-                                meter->state = SEEK_FIRST_HEADER_BYTE;
+                                meter->state         = SEEK_FIRST_HEADER_BYTE;
                         }
                         break;
 
                 case READ_CT:
                         meter->packet[meter->packet_length++] = byte;
-                        meter->ct    = byte;
-                        meter->state = READ_LSN;
+                        meter->ct                             = byte;
+                        meter->state                          = READ_LSN;
                         break;
 
                 case READ_LSN:
@@ -89,11 +89,11 @@ bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
                         if (byte == 0u || ((meter->ct & 1u) != 0u && byte != 1u)) {
                                 ++meter->malformed_packets;
                                 meter->packet_length = 0u;
-                                meter->state = SEEK_FIRST_HEADER_BYTE;
+                                meter->state         = SEEK_FIRST_HEADER_BYTE;
                                 break;
                         }
                         meter->packet[meter->packet_length++] = byte;
-                        meter->lsn = byte;
+                        meter->lsn                            = byte;
                         // Skip six fixed bytes, then three bytes per point.
                         // Do not search for AA 55 inside this body: point data
                         // can contain those bytes without starting a packet.
@@ -111,7 +111,7 @@ bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
 
                 default:
                         meter->packet_length = 0u;
-                        meter->state = SEEK_FIRST_HEADER_BYTE;
+                        meter->state         = SEEK_FIRST_HEADER_BYTE;
                         break;
         }
         return false;

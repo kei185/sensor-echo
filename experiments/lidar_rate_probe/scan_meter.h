@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "lidar/sys.h"
 
-#define LIDAR_SCAN_PACKET_MAX_SIZE                                                \
+#define LIDAR_SCAN_PACKET_MAX_SIZE                                                       \
         (SYS_PACKET_SCAN_FIXED_SIZE + 255u * SYS_PACKET_POINT_DATA_SIZE)
 
 typedef struct

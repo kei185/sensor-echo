@@ -250,10 +250,7 @@ static size_t read_points(const ParserScanMeta* meta, uint8_t* payload)
  * @return Number of decoded points, or zero for invalid input.
  */
 size_t read_scan_frame(
-        const uint8_t*      buf,
-        size_t              packet_len,
-        uint8_t*            payload,
-        size_t              payload_capacity)
+        const uint8_t* buf, size_t packet_len, uint8_t* payload, size_t payload_capacity)
 {
         if (buf == NULL || payload == NULL || packet_len < SYS_PACKET_SCAN_FIXED_SIZE ||
             !is_valid_scan_header(buf))
