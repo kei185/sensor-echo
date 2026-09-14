@@ -46,34 +46,38 @@ The frequency response is a configured setting, not a live speed measurement.
 If the query fails, the five-second stream measurement still runs. The normal
 startup loop runs only when the CMake option is off.
 
-## How incoming bytes are counted
+## What the byte rate measures
 
 ```mermaid
 flowchart LR
-    LiDAR[LiDAR byte stream] --> UART[UART4]
-    UART --> DMA[Circular RX DMA]
+    LiDAR[LiDAR sends bytes] --> DMA[UART4 and RX DMA]
     DMA --> Ring[4096-byte ring]
-    DMA -. Remaining byte count .-> Position[CPU finds DMA write position]
-    Ring --> Unread[CPU tracks unread positions]
-    Position --> Unread
-    Unread --> Phase{Measurement phase?}
-    Phase -->|Warm-up| Discard[Advance read position without counting]
-    Phase -->|Five-second sample| Meter[Feed unread bytes to packet counter]
-    Meter --> Report[Bytes, packets, points, and complete laps]
+    Ring --> CPU[CPU collects unread bytes]
+    CPU --> Count[Count bytes during the 5-second sample]
+    Count --> Rate[bytes/s: received stream rate]
+    CPU -. Drain time is not recorded .-> Unknown[CPU read speed: not measured]
 ```
 
 DMA writes positions `0 -> 1 -> ... -> 4095 -> 0` in the same array. The CPU
-keeps a separate read position and follows the DMA write position. It drains
-the ring during warm-up but starts its counters only for the five-second
-sample. This temporary probe ring is independent of the two-slot RX design
-described for the normal firmware.
+follows with a separate read position. During warm-up it advances that position
+without counting; during the sample it counts each byte it collects. The probe
+divides that count by the sample duration to report `bytes/s`.
+
+This estimates the LiDAR's delivered UART data rate **if no bytes are lost**.
+It does not measure how fast the CPU can drain the ring. `max_poll_gap_ms`
+records the longest time between polls, not the time spent reading the bytes.
+An overwritten unread byte can make the reported rate too low; `CHECK` flags
+some warning signs but cannot prove that every byte was collected. This
+temporary ring is independent of the two-slot RX design described for the
+normal firmware.
 
 ```text
 [SCAN PROBE] Configured scan frequency: 6.00 Hz.
 [SCAN PROBE] OK bytes=... duration_ms=... bytes/s=... points/s=... points/lap=... ...
 ```
 
-`bytes/s` counts the received UART stream, including packet headers.
+`bytes/s` counts UART bytes collected from the DMA ring, including packet
+headers.
 `points/s` and `points/lap` use each scan packet's LSN and CT start-of-lap bit;
 `points/lap` averages complete laps only. A `CHECK` result indicates a UART
 error, malformed packet, fewer than two complete laps, or a polling gap that
