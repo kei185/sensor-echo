@@ -49,12 +49,12 @@ startup loop runs only when the CMake option is off.
 ## What the byte rate measures
 
 ```mermaid
-flowchart LR
+flowchart TB
     LiDAR[LiDAR sends bytes] --> DMA[UART4 and RX DMA]
     DMA --> Ring[4096-byte ring]
     Ring --> CPU[CPU collects unread bytes]
-    CPU --> Count[Count bytes during the 5-second sample]
-    Count --> Rate[bytes/s: received stream rate]
+    CPU --> Count[Count bytes for 5 seconds]
+    Count --> Rate[bytes/s estimates LiDAR data rate]
     CPU -. Drain time is not recorded .-> Unknown[CPU read speed: not measured]
 ```
 
