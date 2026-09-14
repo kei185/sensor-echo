@@ -84,11 +84,11 @@ could hide a DMA ring wrap. Packet XOR is not checked in this prototype.
 ```mermaid
 flowchart LR
     Partial[Partial lap at sample start]
-    subgraph LapA[Complete lap A: 6 points]
+    subgraph LapA [Complete lap A: 6 points]
         direction LR
         AStart[START: 1 point] --> AData3[DATA: 3 points] --> AData2[DATA: 2 points]
     end
-    subgraph LapB[Complete lap B: 5 points]
+    subgraph LapB [Complete lap B: 5 points]
         direction LR
         BStart[START: 1 point] --> BData4[DATA: 4 points]
     end
