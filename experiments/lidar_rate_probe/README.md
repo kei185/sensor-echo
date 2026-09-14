@@ -26,7 +26,7 @@ sequenceDiagram
         LiDAR-->>Board: Configured frequency
         Board-->>PC: Print configured setting
     else No valid reply
-        Board-->>PC: Report query failure; continue anyway
+        Board-->>PC: Report query failure and continue anyway
     end
     Board->>Board: Start byte-wide circular RX DMA
     Board->>LiDAR: SCAN
