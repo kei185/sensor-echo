@@ -152,15 +152,6 @@ size_t translate(int8_t* from, int8_t* to)
 
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
-        if (meta.type_code == SYS_TYPE_CODE_SCAN) {
-                const size_t max_points =
-                        (CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE) / sizeof(ParserScannedPoint);
-                const uint8_t point_count = (uint8_t)read_byte(
-                        parser_head + SYS_PACKET_SCAN_HEADER_SIZE + SYS_PACKET_SCAN_CT_SIZE);
-                if (point_count > max_points)
-                        return 0u;
-        }
-
         // Parse the content into the space reserved after the TX header.
         size_t payload_length =
                 translate_frame_content(parser_head, writer_payload_head, meta.type_code);
