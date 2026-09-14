@@ -6,9 +6,12 @@
 
 static void feed_packet(LidarScanMeter* meter, uint8_t ct, uint8_t lsn)
 {
+        // Build just enough of a scan packet to exercise the byte counter.
         const uint8_t header[] = {0xaau, 0x55u, ct, lsn};
         for (size_t i = 0u; i < sizeof(header); ++i)
                 lidar_scan_meter_feed(meter, header[i]);
+        // Put AA 55 inside the body to prove it is skipped as point data,
+        // not mistaken for the start of another packet.
         for (uint16_t i = 0u; i < 6u + 3u * lsn; ++i)
                 lidar_scan_meter_feed(meter, i == 0u ? 0xaau : i == 1u ? 0x55u : 0u);
 }
@@ -18,7 +21,8 @@ int main(void)
         LidarScanMeter meter;
         lidar_scan_meter_reset(&meter);
 
-        // Bytes before the first lap marker are not part of a complete lap.
+        // The first two-point packet belongs to a partial lap and is excluded
+        // from the lap average. The next two complete laps have 4 and 3 points.
         feed_packet(&meter, 0u, 2u);
         feed_packet(&meter, 1u, 1u);
         feed_packet(&meter, 0u, 3u);
@@ -36,6 +40,7 @@ int main(void)
         assert(meter.max_lap_points == 4u);
         assert(meter.current_lap_points == 1u);
 
+        // A zero-point packet is malformed and must not change packet totals.
         lidar_scan_meter_feed(&meter, 0xaau);
         lidar_scan_meter_feed(&meter, 0x55u);
         lidar_scan_meter_feed(&meter, 1u);
@@ -43,6 +48,7 @@ int main(void)
         assert(meter.malformed_packets == 1u);
         assert(meter.packets == 6u);
 
+        // LSN uses one byte, so 255 is the largest possible point count.
         lidar_scan_meter_reset(&meter);
         feed_packet(&meter, 0u, 255u);
         assert(meter.bytes == 10u + 3u * 255u);

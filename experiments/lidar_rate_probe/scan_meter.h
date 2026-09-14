@@ -6,24 +6,28 @@
 
 typedef struct
 {
-        uint32_t bytes;
-        uint32_t points;
-        uint32_t packets;
-        uint32_t complete_laps;
-        uint32_t complete_lap_points;
-        uint32_t min_lap_points;
-        uint32_t max_lap_points;
-        uint32_t malformed_packets;
+        // Results to report after the measurement window.
+        uint32_t bytes;               // Every received byte, including headers.
+        uint32_t points;              // Points in fully received scan packets.
+        uint32_t packets;             // Fully received scan packets.
+        uint32_t complete_laps;       // Intervals between two lap-start markers.
+        uint32_t complete_lap_points; // Points in those complete laps only.
+        uint32_t min_lap_points;      // Smallest complete lap.
+        uint32_t max_lap_points;      // Largest complete lap.
+        uint32_t malformed_packets;   // Packets rejected by basic header checks.
 
-        uint32_t current_lap_points;
-        uint16_t remaining;
-        uint8_t  state;
-        uint8_t  ct;
-        uint8_t  lsn;
-        bool     have_lap;
+        // State kept between calls because a DMA poll may end mid-packet.
+        uint32_t current_lap_points; // Points since the last lap-start marker.
+        uint16_t remaining;          // Bytes left in the current packet body.
+        uint8_t  state;              // Current step of the packet reader.
+        uint8_t  ct;                 // Packet's CT byte (bit 0 marks a new lap).
+        uint8_t  lsn;                // Packet's point count.
+        bool     have_lap;           // True after the first lap-start marker.
 } LidarScanMeter;
 
+// Reset both the reported counters and the partial-packet reader.
 void lidar_scan_meter_reset(LidarScanMeter* meter);
+// Feed exactly one received byte, in UART arrival order.
 void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte);
 
 #endif
