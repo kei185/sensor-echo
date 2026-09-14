@@ -36,7 +36,7 @@ sequenceDiagram
     end
     loop Next 5 seconds: measurement
         LiDAR-->>Board: Scan bytes
-        Board->>Board: Count bytes and points; convert each full packet
+        Board->>Board: Count bytes and convert full packets
     end
     Board->>LiDAR: STOP
     Board-->>PC: Print stream and conversion results
