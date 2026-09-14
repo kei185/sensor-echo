@@ -22,7 +22,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#ifdef SENSOR_ECHO_LIDAR_RATE_PROBE
+#include "experiments/lidar_rate_probe/probe.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -102,7 +104,13 @@ int main(void)
         MX_TIM2_Init();
         MX_UART4_Init();
         /* USER CODE BEGIN 2 */
-
+#ifdef SENSOR_ECHO_LIDAR_RATE_PROBE
+        // This one-shot diagnostic takes over UART4 and prints its result on USART2.
+        lidar_rate_probe_run(&huart4, &huart2);
+        while (1) {
+                HAL_Delay(1000u);
+        }
+#endif
         /* USER CODE END 2 */
 
         /* Infinite loop */
