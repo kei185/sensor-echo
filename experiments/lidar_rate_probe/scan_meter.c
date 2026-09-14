@@ -4,7 +4,8 @@
 
 // A scan packet is AA 55, CT, LSN, FSA, LSA, CS, then LSN point records.
 // FSA, LSA, and CS use six bytes together; each point record uses three bytes.
-// We only need CT and LSN for this measurement, so the rest can be skipped.
+// CT and LSN drive the counters. We also save the whole packet so the probe
+// can measure the real PC-frame converter after the last byte arrives.
 // This prototype does not verify the packet's XOR check code.
 // The lap-start packet may have a CRC byte before AA 55; it still counts as
 // received traffic, but it is not part of the scan packet below.
@@ -48,7 +49,7 @@ static void complete_packet(LidarScanMeter* meter)
         meter->state = SEEK_FIRST_HEADER_BYTE;
 }
 
-void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
+bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
 {
         // Bytes/s includes all UART traffic, even a partial packet at the
         // start or end of the sample. Packet and point counts do not.
@@ -57,19 +58,27 @@ void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
         switch (meter->state) {
                 case SEEK_FIRST_HEADER_BYTE:
                         // Look for the first byte of the scan packet marker.
-                        if (byte == 0xaau)
+                        if (byte == 0xaau) {
+                                meter->packet[0]     = byte;
+                                meter->packet_length = 1u;
                                 meter->state = SEEK_SECOND_HEADER_BYTE;
+                        }
                         break;
 
                 case SEEK_SECOND_HEADER_BYTE:
                         // A second AA might itself start a new AA 55 marker.
-                        if (byte == 0x55u)
+                        if (byte == 0x55u) {
+                                meter->packet[1]     = byte;
+                                meter->packet_length = 2u;
                                 meter->state = READ_CT;
-                        else if (byte != 0xaau)
+                        } else if (byte != 0xaau) {
+                                meter->packet_length = 0u;
                                 meter->state = SEEK_FIRST_HEADER_BYTE;
+                        }
                         break;
 
                 case READ_CT:
+                        meter->packet[meter->packet_length++] = byte;
                         meter->ct    = byte;
                         meter->state = READ_LSN;
                         break;
@@ -79,9 +88,11 @@ void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
                         // packet contains exactly one point in this format.
                         if (byte == 0u || ((meter->ct & 1u) != 0u && byte != 1u)) {
                                 ++meter->malformed_packets;
+                                meter->packet_length = 0u;
                                 meter->state = SEEK_FIRST_HEADER_BYTE;
                                 break;
                         }
+                        meter->packet[meter->packet_length++] = byte;
                         meter->lsn = byte;
                         // Skip six fixed bytes, then three bytes per point.
                         // Do not search for AA 55 inside this body: point data
@@ -91,12 +102,17 @@ void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte)
                         break;
 
                 case SKIP_PACKET_BODY:
-                        if (--meter->remaining == 0u)
+                        meter->packet[meter->packet_length++] = byte;
+                        if (--meter->remaining == 0u) {
                                 complete_packet(meter);
+                                return true;
+                        }
                         break;
 
                 default:
+                        meter->packet_length = 0u;
                         meter->state = SEEK_FIRST_HEADER_BYTE;
                         break;
         }
+        return false;
 }

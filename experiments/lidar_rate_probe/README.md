@@ -1,8 +1,8 @@
 # LiDAR scan-rate probe
 
-This temporary firmware mode measures the LiDAR stream at its **current** scan
-frequency. It does not send a frequency-setting command. If the sensor still
-uses its 6 Hz factory setting, the result describes that setting directly.
+This temporary firmware mode measures the LiDAR stream and scan-frame conversion
+at its **current** scan frequency. It does not change the scan frequency. If the
+sensor still uses its 6 Hz factory setting, the result describes that setting.
 
 The probe uses UART4 at the firmware's configured 230400 bps for the LiDAR and
 prints results on USART2 at 115200 bps. Connect to the board's USART2 serial
@@ -36,10 +36,10 @@ sequenceDiagram
     end
     loop Next 5 seconds: measurement
         LiDAR-->>Board: Scan bytes
-        Board->>Board: Count received bytes and scan points
+        Board->>Board: Count bytes and points; convert each full packet
     end
     Board->>LiDAR: STOP
-    Board-->>PC: Print one measurement result
+    Board-->>PC: Print stream and conversion results
 ```
 
 The frequency response is a configured setting, not a live speed measurement.
@@ -74,14 +74,37 @@ normal firmware.
 ```text
 [SCAN PROBE] Configured scan frequency: 6.00 Hz.
 [SCAN PROBE] OK bytes=... duration_ms=... bytes/s=... points/s=... points/lap=... ...
+[CONVERT PROBE] frames=... failed=... cycles/point=... max_frame_cycles=... max_frame_us=... max_unread=... core_hz=...
 ```
 
 `bytes/s` counts UART bytes collected from the DMA ring, including packet
 headers.
 `points/s` and `points/lap` use each scan packet's LSN and CT start-of-lap bit;
 `points/lap` averages complete laps only. A `CHECK` result indicates a UART
-error, malformed packet, fewer than two complete laps, or a polling gap that
-could hide a DMA ring wrap. Packet XOR is not checked in this prototype.
+error, malformed packet, failed conversion, fewer than two complete laps, or a
+polling gap that could hide a DMA ring wrap. Packet XOR is not checked in this
+prototype.
+
+## What the conversion numbers mean
+
+The probe saves one complete LiDAR packet, then calls the same scan converter
+used by the normal TX code. The converter reads each point, writes a PC frame
+into a scratch buffer, and adds the 10-byte PC header. The next packet
+overwrites that buffer. The probe does **not** send these PC frames.
+
+The STM32 cycle counter measures each conversion call. `cycles/point` is all
+successful conversion cycles divided by all converted points. It includes the
+fixed work done once per packet. `max_frame_cycles` is the longest single
+conversion; `max_frame_us` shows the same time in microseconds. Interrupts may
+run during a call, so the count is elapsed core cycles, not only conversion
+instructions. `frames` counts successful conversions and `failed` counts packets
+that could not be converted.
+
+`max_unread` is the most unread bytes seen when the CPU checked the 4096-byte DMA
+ring. It helps spot a growing backlog, but a full ring wrap can still hide
+lost bytes. This probe does not send PC frames by TX DMA, so it cannot measure
+the full RX-to-PC pipeline or prove that the normal two-slot RX design meets
+its deadline.
 
 ## Which points belong to a complete lap?
 
@@ -119,9 +142,22 @@ results.
 The packet counter can be checked on a host without the STM32 toolchain:
 
 ```sh
-cc -std=c11 -Wall -Wextra -Werror -I. \
+cc -std=c11 -Wall -Wextra -Werror -I. -Isrc \
   experiments/lidar_rate_probe/scan_meter.c \
   experiments/lidar_rate_probe/scan_meter_test.c \
   -o /tmp/lidar_scan_meter_test
 /tmp/lidar_scan_meter_test
+```
+
+The scan payload and PC header can be checked on a host too:
+
+```sh
+cc -std=c11 -Wall -Wextra -Werror \
+  -I. -Isrc -Ilib/libcrc-2.0/include \
+  experiments/lidar_rate_probe/scan_meter.c \
+  src/lidar/parser.c src/tx/scan.c src/tx/header.c src/tx/frame.c \
+  lib/libcrc-2.0/src/crc8.c \
+  experiments/lidar_rate_probe/scan_conversion_test.c \
+  -o /tmp/lidar_scan_conversion_test
+/tmp/lidar_scan_conversion_test
 ```

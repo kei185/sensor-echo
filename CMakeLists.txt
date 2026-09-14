@@ -47,6 +47,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/core.c
     src/tx/frame.c
     src/tx/header.c
+    src/tx/scan.c
     lib/libcrc-2.0/src/crc8.c
 )
 

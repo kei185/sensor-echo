@@ -3,6 +3,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "lidar/sys.h"
+
+#define LIDAR_SCAN_PACKET_MAX_SIZE                                                \
+        (SYS_PACKET_SCAN_FIXED_SIZE + 255u * SYS_PACKET_POINT_DATA_SIZE)
 
 typedef struct
 {
@@ -23,11 +27,13 @@ typedef struct
         uint8_t  ct;                 // Packet's CT byte (bit 0 marks a new lap).
         uint8_t  lsn;                // Packet's point count.
         bool     have_lap;           // True after the first lap-start marker.
+        uint16_t packet_length;      // Bytes saved in packet below.
+        uint8_t  packet[LIDAR_SCAN_PACKET_MAX_SIZE]; // Last complete or partial packet.
 } LidarScanMeter;
 
 // Reset both the reported counters and the partial-packet reader.
 void lidar_scan_meter_reset(LidarScanMeter* meter);
-// Feed exactly one received byte, in UART arrival order.
-void lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte);
+// Feed one UART byte. Return true only when packet contains a complete scan packet.
+bool lidar_scan_meter_feed(LidarScanMeter* meter, uint8_t byte);
 
 #endif

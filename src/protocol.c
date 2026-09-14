@@ -7,6 +7,7 @@
 #include "protocol.h"
 #include "tx/frame.h"
 #include "tx/header.h"
+#include "tx/scan.h"
 #include "lidar/sys.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/core.h"
@@ -121,10 +122,6 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
                                 return 0u;
                         return translate_health(to, &health);
 
-                case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame(from, (ParserScannedPoint*)to) *
-                               sizeof(ParserScannedPoint);
-
                 default:
                         return 0u;
         }
@@ -150,6 +147,16 @@ size_t translate(int8_t* from, int8_t* to)
         // increment pointer
         parser_head += SYS_PACKET_META_SIZE;
 
+        // Scan packets use AA 55 and point records. Share this full frame
+        // converter with the optional timing probe.
+        if (meta.type_code == SYS_TYPE_CODE_SCAN)
+                return tx_scan_frame_write(
+                        (const uint8_t*)parser_head,
+                        CORE_RX_BUF_SIZE - SYS_PACKET_META_SIZE,
+                        (uint8_t*)to,
+                        CORE_TX_BUF_SIZE,
+                        HAL_GetTick());
+
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
         // Parse the content into the space reserved after the TX header.
@@ -159,12 +166,10 @@ size_t translate(int8_t* from, int8_t* to)
         if (payload_length == 0u || payload_length > UINT16_MAX)
                 return 0u;
 
-        FrameType frame_type =
-                meta.type_code == SYS_TYPE_CODE_SCAN ? FRAME_TYPE_LIDAR : FRAME_TYPE_SYS;
         return tx_frame_write_header(
                 (uint8_t*)to,
                 CORE_TX_BUF_SIZE,
                 (uint16_t)payload_length,
-                frame_type,
+                FRAME_TYPE_SYS,
                 HAL_GetTick());
 }
