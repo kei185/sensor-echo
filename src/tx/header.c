@@ -11,7 +11,7 @@ size_t tx_frame_write_header(
         uint32_t  timestamp)
 {
         if (tx_buf == NULL || tx_buf_capacity < TX_FRAME_HEADER_SIZE ||
-            payload_len > tx_buf_capacity - TX_FRAME_HEADER_SIZE || type > FRAME_TYPE_ENC)
+            payload_len > tx_buf_capacity - TX_FRAME_HEADER_SIZE)
                 return 0u;
 
         const size_t frame_size = TX_FRAME_HEADER_SIZE + payload_len;

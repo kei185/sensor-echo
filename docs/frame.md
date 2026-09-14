@@ -17,6 +17,7 @@
 The header is 10 bytes. The start-of-frame bytes are `0xAA 0x55`; payload length
 and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
 be written before the header. Payload length counts payload bytes only.
+The timestamp is the controller's millisecond tick when the frame is built.
 
 ### System Message
 

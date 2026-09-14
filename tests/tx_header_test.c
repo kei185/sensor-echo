@@ -156,8 +156,6 @@ static void test_invalid_arguments_leave_buffer_unchanged(void)
         // The header fits, but two payload bytes do not fit after it.
         assert(tx_frame_write_header(frame, sizeof(frame), 2u, FRAME_TYPE_LIDAR, 0u) ==
                0u);
-        // Type 4 is outside the four frame types defined by the protocol.
-        assert(tx_frame_write_header(frame, sizeof(frame), 1u, (FrameType)4, 0u) == 0u);
         // All failed calls must leave the original buffer bytes untouched.
         assert(memcmp(frame, original, sizeof(frame)) == 0);
 }

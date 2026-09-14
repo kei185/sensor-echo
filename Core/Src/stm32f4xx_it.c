@@ -22,6 +22,7 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "motor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -259,6 +260,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
         GPIOA->ODR ^= GPIO_PIN_5;
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef huart) {}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {}
 
 /* USER CODE END 1 */

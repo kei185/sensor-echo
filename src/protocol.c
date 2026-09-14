@@ -6,6 +6,7 @@
 #include "main.h"
 #include "protocol.h"
 #include "tx/frame.h"
+#include "tx/header.h"
 #include "lidar/sys.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/core.h"
@@ -131,8 +132,8 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
 
 /**
  * @param from points to the head of buffer
- * @param to points to the first field of the payload
- * @return number of bytes written into to-buffer
+ * @param to points to the beginning of a TX frame
+ * @return complete TX frame size, or zero if translation fails
  */
 size_t translate(int8_t* from, int8_t* to)
 {
@@ -151,10 +152,19 @@ size_t translate(int8_t* from, int8_t* to)
 
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
-        // prase frame content
+        // Parse the content into the space reserved after the TX header.
         size_t payload_length =
                 translate_frame_content(parser_head, writer_payload_head, meta.type_code);
 
-        // TODO
-        // write tx frame header into to
+        if (payload_length == 0u || payload_length > UINT16_MAX)
+                return 0u;
+
+        FrameType frame_type =
+                meta.type_code == SYS_TYPE_CODE_SCAN ? FRAME_TYPE_LIDAR : FRAME_TYPE_SYS;
+        return tx_frame_write_header(
+                (uint8_t*)to,
+                CORE_TX_BUF_SIZE,
+                (uint16_t)payload_length,
+                frame_type,
+                HAL_GetTick());
 }
