@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define CORE_RX_BUF_SIZE 4096u // bytes in each RX slot
+#define CORE_RX_BUF_SIZE 2048u // bytes in each RX slot; 2 slots = 4096 bytes
 #define CORE_RX_BUF_NUM  2u
 
 typedef struct RxBuf
