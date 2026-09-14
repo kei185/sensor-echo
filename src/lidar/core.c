@@ -3,8 +3,16 @@
 #include <cmsis_gcc.h>
 #include "lidar/core.h"
 
-static RxBuf       _RX_BUF = {.ready_buf_idx = -1, ._bufs = {0}};
-const RxBuf* const RX_BUF  = &_RX_BUF;
+static int8_t rx_storage[CORE_RX_BUF_SIZE * CORE_RX_BUF_NUM];
+static RxBuf  _RX_BUF = {
+        .ready_buf_idx = -1,
+        ._bufs =
+                {
+                        [0] = &rx_storage[0],
+                        [1] = &rx_storage[CORE_RX_BUF_SIZE],
+                },
+};
+const RxBuf* const RX_BUF = &_RX_BUF;
 
 /**
  * @return buffer safe to read out of multiple buffer
@@ -50,3 +58,20 @@ uint32_t dec_little_endian(const int8_t* buf, const uint8_t len)
 
         return ret;
 }
+
+static int8_t tx_storage[CORE_TX_BUF_SIZE * CORE_TX_BUF_NUM];
+static TxBuf  _TX_BUF = {
+        ._bufs =
+                {
+                        [0] = {.full         = false,
+                               .transmitting = false,
+                               ._buf         = &tx_storage[0]},
+                        [1] = {.full         = false,
+                               .transmitting = false,
+                               ._buf         = &tx_storage[CORE_TX_BUF_SIZE]},
+                        [2] = {.full         = false,
+                               .transmitting = false,
+                               ._buf         = &tx_storage[2u * CORE_TX_BUF_SIZE]},
+                },
+};
+const TxBuf* const TX_BUF = &_TX_BUF;
