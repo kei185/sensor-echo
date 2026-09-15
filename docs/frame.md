@@ -39,7 +39,8 @@ digits. Model, firmware, and hardware values are unsigned decimal numbers.
 
 ### LiDAR frame payload
 
-Size: 4 bytes per point (2 bytes for distance and 2 bytes for angle).
+Size: 4 bytes per point (2 bytes for distance and 2 bytes for angle). Each
+16-bit value is little-endian.
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%

@@ -30,9 +30,9 @@ typedef enum
 #define SYS_PACKET_MODE_BIT_MASK  0b11000000
 #define SYS_PACKET_LEN_BIT_MASK   0b00111111
 #define SYS_PACKET_TYPE_CODE_SIZE 1u // byte
-#define SYS_PACKET_HEADER_LSB     0x5A
-#define SYS_PACKET_HEADER_MSB     0xA5
-#define SYS_PACKET_HEADER         0xA55A
+#define SYS_PACKET_HEADER_LSB     0x5Au
+#define SYS_PACKET_HEADER_MSB     0xA5u
+#define SYS_PACKET_HEADER         0xA55Au
 #define SYS_PACKET_HEADER_LE      (SYS_PACKET_HEADER_LSB | (SYS_PACKET_HEADER_MSB << 8))
 // LE Little Endian
 
@@ -54,8 +54,12 @@ typedef enum
 #define SYS_PACKET_SCAN_CT_START_MASK 0b00000001
 #define SYS_PACKET_SCAN_DATA_QTY_SIZE 1u // byte
 #define SYS_PACKET_SCAN_ANGLE_SIZE    2u // byte
-#define SYS_PACKET_SCAN_CS_SIZE       1u // byte
+#define SYS_PACKET_SCAN_CS_SIZE       2u // bytes
 #define SYS_PACKET_POINT_DATA_SIZE    3u // byte
+#define SYS_PACKET_SCAN_FIXED_SIZE                                                       \
+        (SYS_PACKET_SCAN_HEADER_SIZE + SYS_PACKET_SCAN_CT_SIZE +                         \
+         SYS_PACKET_SCAN_DATA_QTY_SIZE + 2u * SYS_PACKET_SCAN_ANGLE_SIZE +               \
+         SYS_PACKET_SCAN_CS_SIZE)
 
 typedef enum
 {
