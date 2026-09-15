@@ -54,17 +54,15 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
  */
 static int8_t* find_start_sign(int8_t* buf, uint32_t len)
 {
-        uint32_t next_filed_idx = 0;
-
-        for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE ==
-                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
-                        break;
-
-        if (next_filed_idx >= len)
+        if (buf == NULL || len < SYS_PACKET_HEADER_SIZE)
                 return NULL;
 
-        return buf + next_filed_idx;
+        for (uint32_t i = 0u; i < len - 1u; ++i)
+                if ((uint8_t)buf[i] == SYS_PACKET_HEADER_FIRST_BYTE &&
+                    (uint8_t)buf[i + 1u] == SYS_PACKET_HEADER_SECOND_BYTE)
+                        return buf + i;
+
+        return NULL;
 }
 
 /**
@@ -78,9 +76,9 @@ static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
 
         pm->res_len = dec_little_endian(buf, SYS_PACKET_LEN_MODE_SIZE - 1);
 
-        int32_t last_byte = read_byte(buf + SYS_PACKET_LEN_MODE_SIZE - 1);
-        int8_t  rm        = last_byte & SYS_PACKET_MODE_BIT_MASK >> 6;
-        int32_t len       = last_byte & SYS_PACKET_LEN_BIT_MASK << 24;
+        uint8_t  last_byte = (uint8_t)read_byte(buf + SYS_PACKET_LEN_MODE_SIZE - 1);
+        uint8_t  rm        = (last_byte & SYS_PACKET_MODE_BIT_MASK) >> 6;
+        uint32_t len       = (uint32_t)(last_byte & SYS_PACKET_LEN_BIT_MASK) << 24;
 
         set_res_mode(pm, rm);
         pm->res_len |= len;
@@ -93,13 +91,17 @@ static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
  */
 ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
 {
+        if (buf == NULL || rfm == NULL || len < SYS_PACKET_META_SIZE)
+                return NULL;
+
         int8_t* frame_head = find_start_sign(buf, len);
-        if (frame_head == NULL)
+        if (frame_head == NULL ||
+            len - (uint32_t)(frame_head - buf) < SYS_PACKET_META_SIZE)
                 return NULL;
 
         read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, rfm);
 
-        int8_t tc = dec_little_endian(
+        uint8_t tc = (uint8_t)dec_little_endian(
                 frame_head + SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE,
                 SYS_PACKET_TYPE_CODE_SIZE);
 

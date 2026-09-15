@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -6,23 +7,56 @@
 
 #include "experiments/lidar_rate_probe/scan_meter.h"
 #include "checksum.h"
+#include "lidar/parser.h"
 #include "lidar/sys.h"
 #include "tx/frame.h"
 #include "tx/scan.h"
 
-// Other parser functions still use the normal DMA byte reader. A complete
-// scan packet must not need it; fail the test if that changes.
+// Only the response-header test may use the normal DMA byte reader. The copied
+// scan packet must not use it, because that packet is outside the RX slots.
+static bool allow_meta_reads;
+
 int8_t read_byte(const int8_t* buf)
 {
-        (void)buf;
-        abort();
+        if (!allow_meta_reads)
+                abort();
+        return *buf;
 }
 
 uint32_t dec_little_endian(const int8_t* buf, uint8_t len)
 {
-        (void)buf;
-        (void)len;
-        abort();
+        if (!allow_meta_reads)
+                abort();
+        uint32_t value = 0u;
+        for (uint8_t i = 0u; i < len; ++i)
+                value |= (uint32_t)(uint8_t)read_byte(buf + i) << (i * 8u);
+        return value;
+}
+
+static void test_scan_response_header(void)
+{
+        // The one-time A5 5A response header marks an 0x81 continuous stream.
+        int8_t response[] = {
+                (int8_t)0xa5u,
+                0x5a,
+                5,
+                0,
+                0,
+                0x40,
+                (int8_t)0x81u,
+        };
+        ParserMeta meta  = {0};
+        allow_meta_reads = true;
+        assert(read_meta(response, sizeof(response), &meta) == &meta);
+        assert(meta.res_mode == SYS_RES_MODE_CONTINUOUS);
+        assert(meta.type_code == SYS_TYPE_CODE_SCAN);
+        assert(meta.res_len == 5u);
+        assert(read_meta(response, sizeof(response) - 1u, &meta) == NULL);
+
+        response[0] = 0x5a;
+        response[1] = (int8_t)0xa5u;
+        assert(read_meta(response, sizeof(response), &meta) == NULL);
+        allow_meta_reads = false;
 }
 
 static void test_two_points(void)
@@ -138,6 +172,7 @@ static void test_largest_packet(void)
 
 int main(void)
 {
+        test_scan_response_header();
         test_two_points();
         test_angle_wrap();
         test_largest_packet();

@@ -83,7 +83,10 @@ transmit-complete (TC) interrupt. The USART2 interrupt handler must call
 ## LiDAR TX buffer layout
 
 The [LiDAR development manual](../YDLIDAR_T-MINI_PLUS_Development_Manual_with_TOC.pdf)
-defines the sample count (`LSN`) as one byte. A normal LiDAR scan packet has
+shows one `A5 5A` response header after the scan command. It marks a continuous
+response with type `0x81`. Its content is a stream of `AA 55` scan packets; the
+response header is not repeated for every packet. The manual defines the sample
+count (`LSN`) as one byte. A normal LiDAR scan packet has
 10 fixed bytes plus 3 bytes per point, so its largest possible size is
 `10 + 3 * 255 = 775` bytes. This is one packet, not one full rotation.
 

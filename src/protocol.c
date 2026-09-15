@@ -146,7 +146,7 @@ size_t translate(int8_t* from, int8_t* to)
 
         int8_t* parser_head = from;
 
-        // Scan packets start with AA 55 and have no system-response meta header.
+        // One A5 5A meta header starts the scan response; its packets start AA 55.
         ParserMeta meta = {0};
         if ((uint8_t)from[0] == 0xaau && (uint8_t)from[1] == 0x55u) {
                 meta.type_code = SYS_TYPE_CODE_SCAN;

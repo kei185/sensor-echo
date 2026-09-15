@@ -25,16 +25,14 @@ typedef enum
 #define SYS_SCAN_FREQ_UPPER 12u
 #define SYS_SCAN_FREQ_LOWER 6u
 
-#define SYS_PACKET_HEADER_SIZE    2u // byte
-#define SYS_PACKET_LEN_MODE_SIZE  4u // byte
-#define SYS_PACKET_MODE_BIT_MASK  0b11000000
-#define SYS_PACKET_LEN_BIT_MASK   0b00111111
-#define SYS_PACKET_TYPE_CODE_SIZE 1u // byte
-#define SYS_PACKET_HEADER_LSB     0x5A
-#define SYS_PACKET_HEADER_MSB     0xA5
-#define SYS_PACKET_HEADER         0xA55A
-#define SYS_PACKET_HEADER_LE      (SYS_PACKET_HEADER_LSB | (SYS_PACKET_HEADER_MSB << 8))
-// LE Little Endian
+#define SYS_PACKET_HEADER_SIZE        2u // byte
+#define SYS_PACKET_LEN_MODE_SIZE      4u // byte
+#define SYS_PACKET_MODE_BIT_MASK      0b11000000
+#define SYS_PACKET_LEN_BIT_MASK       0b00111111
+#define SYS_PACKET_TYPE_CODE_SIZE     1u // byte
+#define SYS_PACKET_HEADER_FIRST_BYTE  0xA5u
+#define SYS_PACKET_HEADER_SECOND_BYTE 0x5Au
+#define SYS_PACKET_HEADER             0xA55Au
 
 #define SYS_PACKET_META_SIZE                                                             \
         (SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE + SYS_PACKET_TYPE_CODE_SIZE)
