@@ -10,7 +10,10 @@
 #include "lidar/sys.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/core.h"
-#include "lidar/parser.h"
+#include "lidar/parser/meta.h"
+#include "lidar/parser/health.h"
+#include "lidar/parser/device_info.h"
+#include "lidar/parser/scan.h"
 
 bool lidar_rx_dma_done = 0;
 

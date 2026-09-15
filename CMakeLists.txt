@@ -41,7 +41,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     src/motor.c
     src/protocol.c
-    src/lidar/parser.c
+    src/lidar/parser/meta.c
+    src/lidar/parser/health.c
+    src/lidar/parser/device_info.c
+    src/lidar/parser/scan.c
     src/lidar/lidar.c
     src/lidar/sys.c
     src/lidar/core.c
