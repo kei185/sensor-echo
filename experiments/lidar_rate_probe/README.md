@@ -110,6 +110,34 @@ lost bytes. This probe does not send PC frames by TX DMA, so it cannot measure
 the full RX-to-PC pipeline or prove that the normal two-slot RX design meets
 its deadline.
 
+## Measured results at 6 Hz
+
+The [hardware log](artifact.log) has five runs, each with a five-second sample
+after one second of warm-up. All five runs reported `OK`, with no UART errors,
+malformed packets, or failed conversions.
+
+| Measure | Result across five runs |
+| --- | ---: |
+| LiDAR UART bytes collected | 13,253–13,267 bytes/s |
+| Scan points collected | 4,044–4,055 points/s |
+| Complete-lap average | 664–666 points/lap |
+| Complete packets | 547–548 per five seconds |
+| Conversion cost | 346 cycles/point |
+| Longest packet conversion | 165 microseconds |
+| Most unread RX bytes at a poll | 4 bytes |
+
+The packets arrived about every 9.1 milliseconds on average. The longest
+measured conversion was 0.165 milliseconds. This shows that conversion in this
+probe kept up during these runs. It does not measure the RX byte-copy time or
+normal TX DMA traffic.
+
+If every converted packet were sent to the PC, four bytes per point plus a
+10-byte header per packet would need about 17,290 bytes/s. With 8N1 framing,
+that is about 173,000 bits/s on the wire. The probe's 115200-bps PC setting
+cannot carry that full stream. A 230400-bps PC setting has about 25% average
+wire capacity left for LiDAR-only frames; burst handling and other sensors
+still need a full TX test.
+
 ## Which points belong to a complete lap?
 
 ```mermaid
