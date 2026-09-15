@@ -68,6 +68,7 @@ The CRC field uses the 8-bit `crc_8()` function from libcrc. For now, its input
 is only the two payload-length bytes at header offsets 2 and 3. Process each
 byte most-significant bit first and write the full 8-bit result at offset 4.
 The CRC does not currently cover the other header fields or the payload.
+LiDAR RX packet checks are described in [protocol.md](protocol.md#rx-data-checks).
 
 | Parameter | Value |
 |---|---|
