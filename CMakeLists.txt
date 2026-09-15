@@ -47,7 +47,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/core.c
     src/tx/frame.c
     src/tx/header.c
-    src/tx/scan.c
     lib/libcrc-2.0/src/crc8.c
 )
 
@@ -56,6 +55,7 @@ if(SENSOR_ECHO_LIDAR_RATE_PROBE)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         experiments/lidar_rate_probe/probe.c
         experiments/lidar_rate_probe/scan_meter.c
+        src/tx/scan.c
     )
     target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SENSOR_ECHO_LIDAR_RATE_PROBE=1)
