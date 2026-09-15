@@ -87,9 +87,9 @@ prototype.
 
 ## What the conversion numbers mean
 
-The probe saves one complete LiDAR packet, then calls the same scan converter
-used by the normal TX code. The converter reads each point, writes a PC frame
-into a scratch buffer, and adds the 10-byte PC header. The next packet
+The probe saves one complete LiDAR packet, then uses the same scan parser and PC
+header writer as normal TX code. It reads each point, writes a PC frame into a
+scratch buffer, and adds the 10-byte PC header. The next packet
 overwrites that buffer. The probe does **not** send these PC frames.
 
 The STM32 cycle counter measures each conversion call. `cycles/point` is all
