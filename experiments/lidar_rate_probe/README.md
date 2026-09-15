@@ -87,9 +87,9 @@ prototype.
 
 ## What the conversion numbers mean
 
-After the scan command, the LiDAR sends one `A5 5A` response header, then an
-ongoing stream of `AA 55` scan packets. The probe skips that response header
-and measures conversion of each complete content packet.
+The scan command reply begins with an `A5 5A` response header. Its point-data
+content uses `AA 55` scan packets. The probe skips response headers and measures
+conversion of each complete content packet.
 
 The probe saves one complete LiDAR packet, then uses the same scan parser and PC
 header writer as normal TX code. It reads each point, writes a PC frame into a

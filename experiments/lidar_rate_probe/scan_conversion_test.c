@@ -35,7 +35,7 @@ uint32_t dec_little_endian(const int8_t* buf, uint8_t len)
 
 static void test_scan_response_header(void)
 {
-        // The one-time A5 5A response header marks an 0x81 continuous stream.
+        // The A5 5A response header marks an 0x81 continuous stream.
         int8_t response[] = {
                 (int8_t)0xa5u,
                 0x5a,

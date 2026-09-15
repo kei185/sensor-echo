@@ -146,7 +146,7 @@ size_t translate(int8_t* from, int8_t* to)
 
         int8_t* parser_head = from;
 
-        // One A5 5A meta header starts the scan response; its packets start AA 55.
+        // A5 5A begins the scan reply; AA 55 content packets may arrive alone.
         ParserMeta meta = {0};
         if ((uint8_t)from[0] == 0xaau && (uint8_t)from[1] == 0x55u) {
                 meta.type_code = SYS_TYPE_CODE_SCAN;
