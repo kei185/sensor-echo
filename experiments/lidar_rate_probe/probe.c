@@ -151,7 +151,7 @@ static void drain_ring(
                 // During warm-up we still drain the ring, but do not count it.
                 if (meter != NULL &&
                     lidar_scan_meter_feed(meter, rx_ring[*read_position])) {
-                        // Time the same scan converter used by normal TX code.
+                        // Time the scan parser and PC header writer used by normal TX.
                         // Only the destination is different: the next packet
                         // overwrites this scratch frame.
                         uint32_t start     = DWT->CYCCNT;
@@ -170,8 +170,8 @@ static void drain_ring(
                                 conversion->total_cycles += cycles;
                                 if (cycles > conversion->max_frame_cycles)
                                         conversion->max_frame_cycles = cycles;
-                                // Read the output so the compiler must keep
-                                // the conversion even in optimized builds.
+                                // Touch the output so the scratch frame is
+                                // observed by this non-LTO probe build.
                                 output_guard ^= tx_trash[frame_len - 1u];
                         }
                 }
