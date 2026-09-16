@@ -122,7 +122,11 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
                         return translate_health(to, &health);
 
                 case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame(from, (ParserScannedPoint*)to) *
+                        return read_scan_frame(
+                                       (const uint8_t*)from,
+                                       CORE_RX_BUF_SIZE,
+                                       (uint8_t*)to,
+                                       CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE) *
                                sizeof(ParserScannedPoint);
 
                 default:
@@ -142,13 +146,15 @@ size_t translate(int8_t* from, int8_t* to)
 
         int8_t* parser_head = from;
 
-        // parse frame header
+        // A5 5A begins the scan reply; AA 55 content packets may arrive alone.
         ParserMeta meta = {0};
-        if (read_meta(from, CORE_RX_BUF_SIZE, &meta) == NULL)
-                return 0u;
-
-        // increment pointer
-        parser_head += SYS_PACKET_META_SIZE;
+        if ((uint8_t)from[0] == 0xaau && (uint8_t)from[1] == 0x55u) {
+                meta.type_code = SYS_TYPE_CODE_SCAN;
+        } else {
+                if (read_meta(from, CORE_RX_BUF_SIZE, &meta) == NULL)
+                        return 0u;
+                parser_head += SYS_PACKET_META_SIZE;
+        }
 
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
