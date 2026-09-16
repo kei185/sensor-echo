@@ -7,6 +7,6 @@
 void loop(void);
 /* `to` needs CORE_TX_BUF_SIZE bytes. Return the complete PC frame size,
  * or zero if translation fails. */
-size_t translate(int8_t* from, int8_t* to);
+size_t translate(int8_t* to);
 
 #endif

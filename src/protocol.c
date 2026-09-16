@@ -12,7 +12,10 @@
 #include "tx/header.h"
 #include "lidar/sys.h"
 #include "lidar/core.h"
-#include "lidar/parser.h"
+#include "lidar/parser/meta.h"
+#include "lidar/parser/health.h"
+#include "lidar/parser/device_info.h"
+#include "lidar/parser/scan.h"
 
 static const char DEVICE_INFO_MESSAGE_FORMAT[] =
         "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u "
@@ -38,7 +41,7 @@ void loop()
                 // if (enc_arrived)
                 //  translate_enc();
 
-                // translate(int8_t *from, int8_t *to)
+                // translate(int8_t *to)
         }
 }
 
@@ -93,10 +96,9 @@ static size_t translate_health(int8_t* to, ParserHealth* health)
 }
 
 /*
- * @param from points to  the head of the content  field
  * @param to points to the head of the payload field
  */
-static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type)
+static size_t translate_frame_content(int8_t* to, SysTypeCode type)
 {
 
         ParserDeviceInfo info;
@@ -105,18 +107,18 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
         switch (type) {
                 case SYS_TYPE_CODE_DEVICE_INFO:
                         info = (ParserDeviceInfo){0};
-                        if (!read_device_info_frame(from, &info))
+                        if (!read_device_info_frame(&info))
                                 return 0u;
                         return translate_device_info(to, &info);
 
                 case SYS_TYPE_CODE_HEALTH:
                         health = (ParserHealth){0};
-                        if (!read_health_frame(from, &health))
+                        if (!read_health_frame(&health))
                                 return 0u;
                         return translate_health(to, &health);
 
                 case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame(from, (ParserScannedPoint*)to) *
+                        return (size_t)read_scan_frame((ParserScannedPoint*)to) *
                                sizeof(ParserScannedPoint);
 
                 default:
@@ -125,27 +127,22 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
 }
 
 /**
- * @param from points to the head of buffer
  * @param to points to the beginning of a TX frame
  * @return complete TX frame size, or zero if translation fails
  */
-size_t translate(int8_t* from, int8_t* to)
+size_t translate(int8_t* to)
 {
-        if (from == NULL || to == NULL)
+        if (to == NULL)
                 return 0u;
-
-        int8_t* parser_head = from;
 
         ParserMeta meta = {0};
-        if (read_meta(from, CORE_RX_BUF_SIZE, &meta) == NULL)
+        if (read_meta(&meta) == NULL)
                 return 0u;
-
-        parser_head += SYS_PACKET_META_SIZE;
 
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
         size_t payload_length =
-                translate_frame_content(parser_head, writer_payload_head, meta.type_code);
+                translate_frame_content(writer_payload_head, meta.type_code);
 
         if (payload_length == 0u || payload_length > UINT16_MAX)
                 return 0u;
