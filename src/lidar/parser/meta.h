@@ -11,6 +11,6 @@ typedef struct RxFrameMeta
         SysTypeCode type_code;
 } ParserMeta;
 
-ParserMeta* read_meta(int8_t*, uint32_t, ParserMeta*);
+ParserMeta* read_meta(ParserMeta*);
 
 #endif /* LIDAR_PARSER_META_H */

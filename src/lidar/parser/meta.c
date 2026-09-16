@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "lidar/core.h"
@@ -44,38 +45,32 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
         return pm;
 }
 
-/**
- * @param buf: pointer to the buffer to be searched
- * @param len: length of the buffer
- * @return: pointer to the start sign in the buffer, or NULL if not found
- */
-static int8_t* find_start_sign(int8_t* buf, uint32_t len)
+static void find_start_sign(void)
 {
-        uint32_t next_filed_idx = 0;
+        uint8_t previous = (uint8_t)read_byte();
 
-        for (; next_filed_idx < len; ++next_filed_idx)
-                if (SYS_PACKET_HEADER_LE ==
-                    (buf[next_filed_idx] | (buf[next_filed_idx + 1] << 8)))
-                        break;
+        while (true) {
+                uint8_t current = (uint8_t)read_byte();
+                uint16_t header = (uint16_t)previous | ((uint16_t)current << 8);
 
-        if (next_filed_idx >= len)
-                return NULL;
+                if (header == SYS_PACKET_HEADER_LE)
+                        return;
 
-        return buf + next_filed_idx;
+                previous = current;
+        }
 }
 
 /**
  * @brief read response length and response mode field and set them  ParserMeta
  * corresponding fields
- * @param buf: pointer to the buffer containing the response length byte field
  * @param rfm
  */
-static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
+static ParserMeta* read_res_len(ParserMeta* pm)
 {
 
-        pm->res_len = dec_little_endian(buf, SYS_PACKET_LEN_MODE_SIZE - 1);
+        pm->res_len = dec_little_endian(SYS_PACKET_LEN_MODE_SIZE - 1);
 
-        int32_t last_byte = read_byte(buf + SYS_PACKET_LEN_MODE_SIZE - 1);
+        int32_t last_byte = read_byte();
         int8_t  rm        = last_byte & SYS_PACKET_MODE_BIT_MASK >> 6;
         int32_t len       = last_byte & SYS_PACKET_LEN_BIT_MASK << 24;
 
@@ -86,20 +81,15 @@ static ParserMeta* read_res_len(int8_t* buf, ParserMeta* pm)
 }
 
 /**
- * @return NULL if the start of frame  not found
+ * @return parsed meta fields
  */
-ParserMeta* read_meta(int8_t* buf, uint32_t len, ParserMeta* rfm)
+ParserMeta* read_meta(ParserMeta* rfm)
 {
-        int8_t* frame_head = find_start_sign(buf, len);
-        if (frame_head == NULL)
-                return NULL;
+        find_start_sign();
 
-        read_res_len(frame_head + SYS_PACKET_HEADER_SIZE, rfm);
+        read_res_len(rfm);
 
-        int8_t tc = dec_little_endian(
-                frame_head + SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE,
-                SYS_PACKET_TYPE_CODE_SIZE);
-
+        int8_t tc = (int8_t)dec_little_endian(SYS_PACKET_TYPE_CODE_SIZE);
         set_type_code(rfm, tc);
 
         return rfm;

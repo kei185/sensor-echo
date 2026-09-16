@@ -15,6 +15,6 @@ typedef struct RxFrameHealth
         bool    lidar_data_abnormal;
 } ParserHealth;
 
-bool read_health_frame(const int8_t*, ParserHealth*);
+bool read_health_frame(ParserHealth*);
 
 #endif /* LIDAR_PARSER_HEALTH_H */

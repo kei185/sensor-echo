@@ -15,6 +15,6 @@ typedef struct RxFrameDeviceInfo
         uint8_t serial_number[SYS_PACKET_DEVICE_SERIAL_SIZE];
 } ParserDeviceInfo;
 
-bool read_device_info_frame(const int8_t*, ParserDeviceInfo*);
+bool read_device_info_frame(ParserDeviceInfo*);
 
 #endif /* LIDAR_PARSER_DEVICE_INFO_H */

@@ -4,6 +4,7 @@
 
 #define SOF_SIZE             2u
 #define TX_FRAME_HEADER_SIZE 10u
+#define TX_FRAME_CAPACITY    1344u
 
 extern const uint8_t START_OF_FRAME[SOF_SIZE];
 
@@ -14,13 +15,6 @@ typedef enum
         FRAME_TYPE_IMU,
         FRAME_TYPE_ENC,
 } FrameType;
-
-typedef struct
-{
-        FrameType type;
-        uint32_t  len;
-        uint8_t*  payload_head;
-} TxFrame;
 
 #define COMMAND_NUM 4u
 typedef enum

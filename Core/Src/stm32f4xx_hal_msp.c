@@ -162,14 +162,11 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
                 hdma_uart4_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
                 hdma_uart4_rx.Init.PeriphInc           = DMA_PINC_DISABLE;
                 hdma_uart4_rx.Init.MemInc              = DMA_MINC_ENABLE;
-                hdma_uart4_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-                hdma_uart4_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-                hdma_uart4_rx.Init.Mode                = DMA_NORMAL;
+                hdma_uart4_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+                hdma_uart4_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+                hdma_uart4_rx.Init.Mode                = DMA_CIRCULAR;
                 hdma_uart4_rx.Init.Priority            = DMA_PRIORITY_HIGH;
-                hdma_uart4_rx.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;
-                hdma_uart4_rx.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-                hdma_uart4_rx.Init.MemBurst            = DMA_MBURST_INC4;
-                hdma_uart4_rx.Init.PeriphBurst         = DMA_PBURST_INC4;
+                hdma_uart4_rx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
                 if (HAL_DMA_Init(&hdma_uart4_rx) != HAL_OK) {
                         Error_Handler();
                 }

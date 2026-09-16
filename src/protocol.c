@@ -1,21 +1,21 @@
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+
 #include "main.h"
+#include "stm32f4xx_hal_uart.h"
+
+#include "arbiter.h"
 #include "protocol.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 #include "lidar/sys.h"
-#include "stm32f4xx_hal_uart.h"
 #include "lidar/core.h"
 #include "lidar/parser/meta.h"
 #include "lidar/parser/health.h"
 #include "lidar/parser/device_info.h"
 #include "lidar/parser/scan.h"
-
-bool lidar_rx_dma_done = 0;
 
 static const char DEVICE_INFO_MESSAGE_FORMAT[] =
         "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u "
@@ -23,36 +23,26 @@ static const char DEVICE_INFO_MESSAGE_FORMAT[] =
 static const char HEALTH_MESSAGE_FORMAT[] =
         "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X\r\n";
 
-void initialize();
-void arbitrate(RxBuf rx_buf, TxBuf tx_buf);
-
+bool imu_arrived;
+bool enc_arrived;
 void loop()
 {
         HAL_UART_Transmit(&huart2, (uint8_t*)"DEVICE INITIALIZING...\r\n", 22, 100);
 
-        initialize();
+        init_arbiter();
 
         while (1) {
-                if (lidar_rx_dma_done == true) {
-                        HAL_UART_Transmit(&huart2, (uint8_t*)"RX DMA trap\r\n", 24, 100);
-                        lidar_rx_dma_done = false;
-                }
+                // if (scan_stop_requested)
+                // stop scan and send ack
+
+                // if (imu_arrived)
+                //  translate_imu();
+
+                // if (enc_arrived)
+                //  translate_enc();
+
+                // translate(int8_t *to)
         }
-}
-
-void initialize()
-{
-
-        HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_RX_HEALTH], MSG_SIZE, 100);
-        // TODO revcieve message and parse then send it
-
-        HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_RX_SYS_INFO], MSG_SIZE, 100);
-        // TODO revcieve message and parse then send it
-
-        uint8_t rx_buf[COMMAND_SIZE];
-        HAL_UART_Receive(&huart2, rx_buf, COMMAND_SIZE, 100);
-
-        // TODO set dma it and start scan
 }
 
 static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
@@ -74,7 +64,8 @@ static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
         serial[SYS_PACKET_DEVICE_SERIAL_SIZE * 2u] = '\0';
 
         const size_t capacity = CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE;
-        int          written  = snprintf(
+
+        int written = snprintf(
                 (char*)to,
                 capacity,
                 DEVICE_INFO_MESSAGE_FORMAT,
@@ -83,6 +74,7 @@ static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
                 (unsigned)info->firmware_minor,
                 (unsigned)info->hardware_version,
                 serial);
+
         return written < 0 || (size_t)written >= capacity ? 0u : (size_t)written;
 }
 
@@ -92,20 +84,21 @@ static size_t translate_health(int8_t* to, ParserHealth* health)
                 return 0u;
 
         const size_t capacity = CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE;
-        int          written  = snprintf(
+
+        int written = snprintf(
                 (char*)to,
                 capacity,
                 HEALTH_MESSAGE_FORMAT,
                 health->health > 0u ? "FAULT" : "OK",
                 (unsigned)health->health);
+
         return written < 0 || (size_t)written >= capacity ? 0u : (size_t)written;
 }
 
 /*
- * @param from points to  the head of the content  field
  * @param to points to the head of the payload field
  */
-static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type)
+static size_t translate_frame_content(int8_t* to, SysTypeCode type)
 {
 
         ParserDeviceInfo info;
@@ -114,18 +107,18 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
         switch (type) {
                 case SYS_TYPE_CODE_DEVICE_INFO:
                         info = (ParserDeviceInfo){0};
-                        if (!read_device_info_frame(from, &info))
+                        if (!read_device_info_frame(&info))
                                 return 0u;
                         return translate_device_info(to, &info);
 
                 case SYS_TYPE_CODE_HEALTH:
                         health = (ParserHealth){0};
-                        if (!read_health_frame(from, &health))
+                        if (!read_health_frame(&health))
                                 return 0u;
                         return translate_health(to, &health);
 
                 case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame(from, (ParserScannedPoint*)to) *
+                        return (size_t)read_scan_frame((ParserScannedPoint*)to) *
                                sizeof(ParserScannedPoint);
 
                 default:
@@ -134,36 +127,29 @@ static size_t translate_frame_content(int8_t* from, int8_t* to, SysTypeCode type
 }
 
 /**
- * @param from points to the head of buffer
  * @param to points to the beginning of a TX frame
  * @return complete TX frame size, or zero if translation fails
  */
-size_t translate(int8_t* from, int8_t* to)
+size_t translate(int8_t* to)
 {
-        if (from == NULL || to == NULL)
+        if (to == NULL)
                 return 0u;
 
-        int8_t* parser_head = from;
-
-        // parse frame header
         ParserMeta meta = {0};
-        if (read_meta(from, CORE_RX_BUF_SIZE, &meta) == NULL)
+        if (read_meta(&meta) == NULL)
                 return 0u;
-
-        // increment pointer
-        parser_head += SYS_PACKET_META_SIZE;
 
         int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
-        // Parse the content into the space reserved after the TX header.
         size_t payload_length =
-                translate_frame_content(parser_head, writer_payload_head, meta.type_code);
+                translate_frame_content(writer_payload_head, meta.type_code);
 
         if (payload_length == 0u || payload_length > UINT16_MAX)
                 return 0u;
 
         FrameType frame_type =
                 meta.type_code == SYS_TYPE_CODE_SCAN ? FRAME_TYPE_LIDAR : FRAME_TYPE_SYS;
+
         return tx_frame_write_header(
                 (uint8_t*)to,
                 CORE_TX_BUF_SIZE,

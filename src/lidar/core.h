@@ -5,36 +5,46 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define CORE_RX_BUF_SIZE 2048u // bytes in each RX slot; 2 slots = 4096 bytes
-#define CORE_RX_BUF_NUM  2u
-
+#define CORE_RX_BUF_SIZE 4096u // byte
 typedef struct RxBuf
 {
-        int8_t  ready_buf_idx;          // supposed to be update in DMA IRQ handler
-        int8_t* _bufs[CORE_RX_BUF_NUM]; // two slices of one contiguous array
+
+        // suppose that dma is set direct mode, byte wise transfer
+        volatile uint32_t* remain_bytes; // updated by DMA
+        volatile uint8_t   lap;          // update by DMA RX IRQ
+        int8_t*            _buf;
+        uint32_t           read_idx;
 } RxBuf;
 
 extern const RxBuf* const RX_BUF;
 
-int8_t*  cur_buf(void);
-bool     is_safe_read(const int8_t*, uint32_t);
-int8_t   read_byte(const int8_t*);
-uint32_t dec_little_endian(const int8_t*, uint8_t);
+bool     is_lapped(void);
+void     increment_lap(void);
+bool     is_safe_read(void);
+int8_t   read_byte();
+uint32_t dec_little_endian(const uint8_t);
 
 #define CORE_TX_BUF_SIZE 1344u // bytes in each TX slot; 3 slots = 4032 bytes
-#define CORE_TX_BUF_NUM  3u
+#define CORE_TX_BUF_NUM  5u
 
-typedef struct TxBufStat
+typedef struct
 {
-        bool    full;
-        bool    transmitting;
-        int8_t* _buf; // one slice of the contiguous TX array
-} TxBufStat;
 
-typedef struct TxBuf
+        bool     full;
+        uint32_t length;
+        int8_t   _buf[CORE_TX_BUF_SIZE];
+} TxBufSlot;
+
+typedef struct TxBufQueue
 {
-        TxBufStat _bufs[CORE_TX_BUF_NUM];
+        uint8_t   writer_head;
+        uint8_t   reader_head;
+        TxBufSlot slots[CORE_TX_BUF_NUM];
 } TxBuf;
+
+void       release(TxBufSlot*);
+TxBufSlot* get_full_buf(void);
+TxBufSlot* get_empty_buf(void);
 
 extern const TxBuf* const TX_BUF;
 

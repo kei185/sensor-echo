@@ -22,15 +22,12 @@ static bool health_parse(ParserHealth* this)
         return true;
 }
 
-/**
- * @param buf points to health byte field
- */
-bool read_health_frame(const int8_t* buf, ParserHealth* health)
+bool read_health_frame(ParserHealth* health)
 {
         if (health == NULL)
                 return false;
 
-        health->health = (uint8_t)read_byte(buf);
+        health->health = (uint8_t)read_byte();
 
         health_parse(health);
         return true;

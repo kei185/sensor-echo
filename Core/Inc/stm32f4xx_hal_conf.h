@@ -92,8 +92,8 @@ extern "C"
 
 /* ########################## HSE/HSI Values adaptation ##################### */
 /**
- * @brief Adjust the value of External High Speed oscillator (HSE) used in your application.
- *        This value is used by the RCC HAL module to compute the system frequency
+ * @brief Adjust the value of External High Speed oscillator (HSE) used in your
+ * application. This value is used by the RCC HAL module to compute the system frequency
  *        (when HSE is used as system clock source, directly or through the PLL).
  */
 #if !defined(HSE_VALUE)
@@ -118,8 +118,8 @@ extern "C"
  */
 #if !defined(LSI_VALUE)
 #define LSI_VALUE 32000U /*!< LSI Typical Value in Hz*/
-#endif /* LSI_VALUE */   /*!< Value of the Internal Low Speed oscillator in Hz                     \
-                          The real value may vary depending on the variations                      \
+#endif /* LSI_VALUE */   /*!< Value of the Internal Low Speed oscillator in Hz           \
+                          The real value may vary depending on the variations            \
                           in voltage and temperature.*/
 /**
  * @brief External Low Speed oscillator (LSE) value.
@@ -138,7 +138,8 @@ extern "C"
  *        frequency, this source is inserted directly through I2S_CKIN pad.
  */
 #if !defined(EXTERNAL_CLOCK_VALUE)
-#define EXTERNAL_CLOCK_VALUE 12288000U /*!< Value of the External audio frequency in Hz*/
+#define EXTERNAL_CLOCK_VALUE 12288000U /*!< Value of the External audio frequency in     \
+                                          Hz*/
 #endif                                 /* EXTERNAL_CLOCK_VALUE */
 
 /* Tip: To avoid modifying this file each time you need to use different HSE,
@@ -169,7 +170,7 @@ extern "C"
 #define USE_HAL_HCD_REGISTER_CALLBACKS       0U /* HCD register callback disabled       */
 #define USE_HAL_I2C_REGISTER_CALLBACKS       0U /* I2C register callback disabled       */
 #define USE_HAL_FMPI2C_REGISTER_CALLBACKS    0U /* FMPI2C register callback disabled    */
-#define USE_HAL_FMPSMBUS_REGISTER_CALLBACKS  0U /* FMPSMBUS register callback disabled  */
+#define USE_HAL_FMPSMBUS_REGISTER_CALLBACKS  0U /* FMPSMBUS register callback disabled */
 #define USE_HAL_I2S_REGISTER_CALLBACKS       0U /* I2S register callback disabled       */
 #define USE_HAL_IRDA_REGISTER_CALLBACKS      0U /* IRDA register callback disabled      */
 #define USE_HAL_LPTIM_REGISTER_CALLBACKS     0U /* LPTIM register callback disabled     */
@@ -184,16 +185,17 @@ extern "C"
 #define USE_HAL_RTC_REGISTER_CALLBACKS       0U /* RTC register callback disabled       */
 #define USE_HAL_SAI_REGISTER_CALLBACKS       0U /* SAI register callback disabled       */
 #define USE_HAL_SD_REGISTER_CALLBACKS        0U /* SD register callback disabled        */
-#define USE_HAL_SMARTCARD_REGISTER_CALLBACKS 0U /* SMARTCARD register callback disabled */
-#define USE_HAL_SDRAM_REGISTER_CALLBACKS     0U /* SDRAM register callback disabled     */
-#define USE_HAL_SRAM_REGISTER_CALLBACKS      0U /* SRAM register callback disabled      */
-#define USE_HAL_SPDIFRX_REGISTER_CALLBACKS   0U /* SPDIFRX register callback disabled   */
-#define USE_HAL_SMBUS_REGISTER_CALLBACKS     0U /* SMBUS register callback disabled     */
-#define USE_HAL_SPI_REGISTER_CALLBACKS       0U /* SPI register callback disabled       */
-#define USE_HAL_TIM_REGISTER_CALLBACKS       0U /* TIM register callback disabled       */
-#define USE_HAL_UART_REGISTER_CALLBACKS      0U /* UART register callback disabled      */
-#define USE_HAL_USART_REGISTER_CALLBACKS     0U /* USART register callback disabled     */
-#define USE_HAL_WWDG_REGISTER_CALLBACKS      0U /* WWDG register callback disabled      */
+#define USE_HAL_SMARTCARD_REGISTER_CALLBACKS 0U /* SMARTCARD register callback disabled  \
+                                                 */
+#define USE_HAL_SDRAM_REGISTER_CALLBACKS   0U   /* SDRAM register callback disabled     */
+#define USE_HAL_SRAM_REGISTER_CALLBACKS    0U   /* SRAM register callback disabled      */
+#define USE_HAL_SPDIFRX_REGISTER_CALLBACKS 0U   /* SPDIFRX register callback disabled   */
+#define USE_HAL_SMBUS_REGISTER_CALLBACKS   0U   /* SMBUS register callback disabled     */
+#define USE_HAL_SPI_REGISTER_CALLBACKS     0U   /* SPI register callback disabled       */
+#define USE_HAL_TIM_REGISTER_CALLBACKS     0U   /* TIM register callback disabled       */
+#define USE_HAL_UART_REGISTER_CALLBACKS    0U   /* UART register callback disabled      */
+#define USE_HAL_USART_REGISTER_CALLBACKS   0U   /* USART register callback disabled     */
+#define USE_HAL_WWDG_REGISTER_CALLBACKS    0U   /* WWDG register callback disabled      */
 
 /* ########################## Assert Selection ############################## */
 /**
@@ -237,26 +239,36 @@ extern "C"
 #define PHY_BCR ((uint16_t)0x0000U) /*!< Transceiver Basic Control Register   */
 #define PHY_BSR ((uint16_t)0x0001U) /*!< Transceiver Basic Status Register    */
 
-#define PHY_RESET                   ((uint16_t)0x8000U) /*!< PHY Reset */
-#define PHY_LOOPBACK                ((uint16_t)0x4000U) /*!< Select loop-back mode */
-#define PHY_FULLDUPLEX_100M         ((uint16_t)0x2100U) /*!< Set the full-duplex mode at 100 Mb/s */
-#define PHY_HALFDUPLEX_100M         ((uint16_t)0x2000U) /*!< Set the half-duplex mode at 100 Mb/s */
-#define PHY_FULLDUPLEX_10M          ((uint16_t)0x0100U) /*!< Set the full-duplex mode at 10 Mb/s  */
-#define PHY_HALFDUPLEX_10M          ((uint16_t)0x0000U) /*!< Set the half-duplex mode at 10 Mb/s  */
-#define PHY_AUTONEGOTIATION         ((uint16_t)0x1000U) /*!< Enable auto-negotiation function     */
-#define PHY_RESTART_AUTONEGOTIATION ((uint16_t)0x0200U) /*!< Restart auto-negotiation function */
-#define PHY_POWERDOWN               ((uint16_t)0x0800U) /*!< Select the power down mode           */
-#define PHY_ISOLATE                 ((uint16_t)0x0400U) /*!< Isolate PHY from MII                 */
+#define PHY_RESET    ((uint16_t)0x8000U) /*!< PHY Reset */
+#define PHY_LOOPBACK ((uint16_t)0x4000U) /*!< Select loop-back mode */
+#define PHY_FULLDUPLEX_100M                                                              \
+        ((uint16_t)0x2100U) /*!< Set the full-duplex mode at 100 Mb/s */
+#define PHY_HALFDUPLEX_100M                                                              \
+        ((uint16_t)0x2000U) /*!< Set the half-duplex mode at 100 Mb/s */
+#define PHY_FULLDUPLEX_10M                                                               \
+        ((uint16_t)0x0100U) /*!< Set the full-duplex mode at 10 Mb/s  */
+#define PHY_HALFDUPLEX_10M                                                               \
+        ((uint16_t)0x0000U) /*!< Set the half-duplex mode at 10 Mb/s  */
+#define PHY_AUTONEGOTIATION                                                              \
+        ((uint16_t)0x1000U) /*!< Enable auto-negotiation function     */
+#define PHY_RESTART_AUTONEGOTIATION                                                      \
+        ((uint16_t)0x0200U)               /*!< Restart auto-negotiation function    */
+#define PHY_POWERDOWN ((uint16_t)0x0800U) /*!< Select the power down mode           */
+#define PHY_ISOLATE   ((uint16_t)0x0400U) /*!< Isolate PHY from MII                 */
 
-#define PHY_AUTONEGO_COMPLETE ((uint16_t)0x0020U) /*!< Auto-Negotiation process completed   */
-#define PHY_LINKED_STATUS     ((uint16_t)0x0004U) /*!< Valid link established               */
-#define PHY_JABBER_DETECTION  ((uint16_t)0x0002U) /*!< Jabber condition detected            */
+#define PHY_AUTONEGO_COMPLETE                                                            \
+        ((uint16_t)0x0020U)                   /*!< Auto-Negotiation process completed   */
+#define PHY_LINKED_STATUS ((uint16_t)0x0004U) /*!< Valid link established */
+#define PHY_JABBER_DETECTION                                                             \
+        ((uint16_t)0x0002U) /*!< Jabber condition detected            */
 
 /* Section 4: Extended PHY Registers */
 #define PHY_SR ((uint16_t)) /*!< PHY status register Offset                      */
 
-#define PHY_SPEED_STATUS  ((uint16_t)) /*!< PHY Speed mask                                  */
-#define PHY_DUPLEX_STATUS ((uint16_t)) /*!< PHY Duplex mask                                 */
+#define PHY_SPEED_STATUS                                                                 \
+        ((uint16_t)) /*!< PHY Speed mask                                  */
+#define PHY_DUPLEX_STATUS                                                                \
+        ((uint16_t)) /*!< PHY Duplex mask                                 */
 
         /* ################## SPI peripheral configuration ########################## */
 
@@ -482,7 +494,8 @@ extern "C"
          *         If expr is true, it returns no value.
          * @retval None
          */
-#define assert_param(expr) ((expr) ? (void)0U : assert_failed((uint8_t*)__FILE__, __LINE__))
+#define assert_param(expr)                                                               \
+        ((expr) ? (void)0U : assert_failed((uint8_t*)__FILE__, __LINE__))
         /* Exported functions ------------------------------------------------------- */
         void assert_failed(uint8_t* file, uint32_t line);
 #else

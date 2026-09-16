@@ -17,9 +17,8 @@ typedef struct
         uint16_t start_angle; // decoded sensor angle in Q6 degrees
         uint16_t end_angle;   // decoded sensor angle in Q6 degrees
         uint8_t  data_num;    // one-byte LSN field
-        int8_t*  data_frame_head;
 } ParserScanMeta;
 
-uint32_t read_scan_frame(int8_t*, ParserScannedPoint*);
+uint32_t read_scan_frame(ParserScannedPoint*);
 
 #endif /* LIDAR_PARSER_SCAN_H */
