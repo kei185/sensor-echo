@@ -3,10 +3,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "lidar/parser.h"
-
-extern bool rx_dma;
-extern bool tx_dma;
 
 void loop(void);
 /* `to` needs CORE_TX_BUF_SIZE bytes. Return the complete PC frame size,
