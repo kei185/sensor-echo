@@ -1,0 +1,15 @@
+[SCAN PROBE] Stopping LiDAR before frequency query.
+[SCAN PROBE] Configured scan frequency: 6.00 Hz.
+[SCAN PROBE] OK bytes=66266 duration_ms=5000 bytes/s=13253 points/s=4048 points/lap=663 range=646..668 laps=29 packets=549 malformed=0 max_poll_gap_ms=1 uart_error=0x0
+[SCAN PROBE] Stopping LiDAR before frequency query.
+[SCAN PROBE] Configured scan frequency: 6.00 Hz.
+[SCAN PROBE] OK bytes=66269 duration_ms=5000 bytes/s=13253 points/s=4050 points/lap=663 range=650..672 laps=30 packets=550 malformed=0 max_poll_gap_ms=1 uart_error=0x0
+[SCAN PROBE] Stopping LiDAR before frequency query.
+[SCAN PROBE] Configured scan frequency: 6.00 Hz.
+[SCAN PROBE] OK bytes=66308 duration_ms=5000 bytes/s=13261 points/s=4046 points/lap=663 range=646..670 laps=30 packets=550 malformed=0 max_poll_gap_ms=1 uart_error=0x0
+[SCAN PROBE] Stopping LiDAR before frequency query.
+[SCAN PROBE] Configured scan frequency: 6.00 Hz.
+[SCAN PROBE] OK bytes=66339 duration_ms=5000 bytes/s=13267 points/s=4047 points/lap=663 range=644..670 laps=30 packets=550 malformed=0 max_poll_gap_ms=1 uart_error=0x0
+[SCAN PROBE] Stopping LiDAR before frequency query.
+[SCAN PROBE] Configured scan frequency: 6.00 Hz.
+[SCAN PROBE] OK bytes=66308 duration_ms=5000 bytes/s=13261 points/s=4053 points/lap=663 range=646..668 laps=30 packets=551 malformed=0 max_poll_gap_ms=1 uart_error=0x0

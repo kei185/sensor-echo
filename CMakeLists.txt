@@ -50,7 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     lib/libcrc-2.0/src/crc8.c
 )
 
-option(SENSOR_ECHO_LIDAR_RATE_PROBE "Run the LiDAR scan-rate probe at startup" OFF)
+option(SENSOR_ECHO_LIDAR_RATE_PROBE "Run the LiDAR scan-rate probe at startup" ON)
 if(SENSOR_ECHO_LIDAR_RATE_PROBE)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE
         experiments/lidar_rate_probe/probe.c
