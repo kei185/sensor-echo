@@ -8,23 +8,29 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 enable_testing()
 
-add_executable(lidar_parser_tests
-    parser_test.c
-    parser_test_input.c
-    ../../src/lidar/parser/meta.c
-    ../../src/lidar/parser/health.c
-    ../../src/lidar/parser/device_info.c
-    ../../src/lidar/parser/scan.c
-)
+function(add_parser_test parser_name)
+    set(test_target "${parser_name}_test")
 
-target_include_directories(lidar_parser_tests PRIVATE
-    ../../src
-)
+    add_executable(${test_target}
+        ${test_target}.c
+        parser_test_input.c
+        ../../src/lidar/parser/${parser_name}.c
+    )
 
-target_compile_options(lidar_parser_tests PRIVATE
-    -Wall
-    -Wextra
-    -Werror
-)
+    target_include_directories(${test_target} PRIVATE
+        ../../src
+    )
 
-add_test(NAME lidar_parser_tests COMMAND lidar_parser_tests)
+    target_compile_options(${test_target} PRIVATE
+        -Wall
+        -Wextra
+        -Werror
+    )
+
+    add_test(NAME ${test_target} COMMAND ${test_target})
+endfunction()
+
+add_parser_test(meta)
+add_parser_test(health)
+add_parser_test(device_info)
+add_parser_test(scan)
