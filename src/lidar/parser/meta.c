@@ -67,15 +67,11 @@ static void find_start_sign(void)
  */
 static ParserMeta* read_res_len(ParserMeta* pm)
 {
+        uint32_t len_mode = dec_little_endian(SYS_PACKET_LEN_MODE_SIZE);
 
-        pm->res_len = dec_little_endian(SYS_PACKET_LEN_MODE_SIZE - 1);
-
-        int32_t last_byte = read_byte();
-        int8_t  rm        = last_byte & SYS_PACKET_MODE_BIT_MASK >> 6;
-        int32_t len       = last_byte & SYS_PACKET_LEN_BIT_MASK << 24;
-
-        set_res_mode(pm, rm);
-        pm->res_len |= len;
+        // The low 30 bits are the length; the upper two bits select the mode.
+        pm->res_len = len_mode & 0x3fffffffu;
+        set_res_mode(pm, (uint8_t)(len_mode >> 30));
 
         return pm;
 }

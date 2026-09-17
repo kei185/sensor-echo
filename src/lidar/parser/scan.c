@@ -11,7 +11,7 @@
 
 static bool is_valid_scan_header(void)
 {
-        return SYS_PACKET_SCAN_HEADER_LE == dec_little_endian(SYS_PACKET_SCAN_HEADER_SIZE);
+        return SYS_PACKET_SCAN_HEADER == dec_little_endian(SYS_PACKET_SCAN_HEADER_SIZE);
 }
 
 static bool is_start_frame(void)
@@ -93,7 +93,7 @@ static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
 uint32_t read_scan_frame(ParserScannedPoint* points)
 {
         // read header
-        if (is_valid_scan_header())
+        if (!is_valid_scan_header())
                 return 0;
 
         // read ct
@@ -110,6 +110,9 @@ uint32_t read_scan_frame(ParserScannedPoint* points)
         scanMeta.start_angle = read_angle();
 
         scanMeta.end_angle = read_angle();
+
+        // CS is not verified yet, but its two wire bytes must be consumed before Si.
+        (void)dec_little_endian(SYS_PACKET_SCAN_CS_SIZE);
 
         // read points and pack them into buf
         uint32_t read_num = read_points(&scanMeta, points);

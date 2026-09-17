@@ -54,7 +54,7 @@ typedef enum
 #define SYS_PACKET_SCAN_CT_START_MASK 0b00000001
 #define SYS_PACKET_SCAN_DATA_QTY_SIZE 1u // byte
 #define SYS_PACKET_SCAN_ANGLE_SIZE    2u // byte
-#define SYS_PACKET_SCAN_CS_SIZE       1u // byte
+#define SYS_PACKET_SCAN_CS_SIZE       2u // byte
 #define SYS_PACKET_POINT_DATA_SIZE    3u // byte
 
 typedef enum
