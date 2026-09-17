@@ -6,7 +6,7 @@
 
 typedef struct RxFrameMeta
 {
-        uint16_t    res_len;
+        uint32_t    res_len;
         SysResMode  res_mode;
         SysTypeCode type_code;
 } ParserMeta;
