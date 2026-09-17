@@ -53,6 +53,16 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     lib/libcrc-2.0/src/crc8.c
 )
 
+option(SENSOR_ECHO_LIDAR_RATE_PROBE "Run the LiDAR scan-rate probe at startup" ON)
+if(SENSOR_ECHO_LIDAR_RATE_PROBE)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+        experiments/lidar_rate_probe/probe.c
+        experiments/lidar_rate_probe/scan_meter.c
+    )
+    target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE SENSOR_ECHO_LIDAR_RATE_PROBE=1)
+endif()
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
