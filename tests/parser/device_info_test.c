@@ -7,7 +7,7 @@
 
 static void read_device_info_frame_preserves_wire_byte_order(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {
                 151u,  2u,    7u,    3u,    0x00u, 0x11u, 0x22u, 0x33u, 0x44u, 0x55u,
                 0x66u, 0x77u, 0x88u, 0x99u, 0xaau, 0xbbu, 0xccu, 0xddu, 0xeeu, 0xffu,
@@ -15,10 +15,10 @@ static void read_device_info_frame_preserves_wire_byte_order(void)
         ParserDeviceInfo actual = {0};
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         bool result = read_device_info_frame(&actual);
 
-        // verify
+        // 検証
         assert(result);
         assert(actual.model == 151u);
         assert(actual.firmware_major == 2u);
@@ -31,14 +31,14 @@ static void read_device_info_frame_preserves_wire_byte_order(void)
 
 static void read_device_info_frame_rejects_null_output_without_reading(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {0x97u};
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         bool result = read_device_info_frame(NULL);
 
-        // verify
+        // 検証
         assert(!result);
         assert(parser_test_bytes_read() == 0u);
 }

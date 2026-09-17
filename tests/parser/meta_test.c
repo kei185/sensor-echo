@@ -5,7 +5,7 @@
 
 static void read_meta_skips_noise_and_reads_device_info_header(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {
                 0xffu,
                 0x5au,
@@ -26,10 +26,10 @@ static void read_meta_skips_noise_and_reads_device_info_header(void)
         };
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         ParserMeta* result = read_meta(&actual);
 
-        // verify
+        // 検証
         assert(result == &actual);
         assert(actual.res_len == expected.res_len);
         assert(actual.res_mode == expected.res_mode);
@@ -39,7 +39,7 @@ static void read_meta_skips_noise_and_reads_device_info_header(void)
 
 static void read_meta_decodes_continuous_scan_header(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {
                 0x5au,
                 0xa5u,
@@ -57,10 +57,10 @@ static void read_meta_decodes_continuous_scan_header(void)
         };
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         read_meta(&actual);
 
-        // verify
+        // 検証
         assert(actual.res_len == expected.res_len);
         assert(actual.res_mode == expected.res_mode);
         assert(actual.type_code == expected.type_code);
@@ -68,7 +68,7 @@ static void read_meta_decodes_continuous_scan_header(void)
 
 static void read_meta_preserves_all_30_response_length_bits(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {
                 0x5au,
                 0xa5u,
@@ -82,10 +82,10 @@ static void read_meta_preserves_all_30_response_length_bits(void)
         const uint32_t expected_response_length = 0x12345678u;
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         read_meta(&actual);
 
-        // verify
+        // 検証
         assert(actual.res_len == expected_response_length);
         assert(actual.res_mode == SYS_RES_MODE_SINGLE);
         assert(actual.type_code == SYS_TYPE_CODE_HEALTH);
@@ -93,7 +93,7 @@ static void read_meta_preserves_all_30_response_length_bits(void)
 
 static void read_meta_marks_unknown_mode_and_type_as_undefined(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {
                 0x5au,
                 0xa5u,
@@ -106,10 +106,10 @@ static void read_meta_marks_unknown_mode_and_type_as_undefined(void)
         ParserMeta actual = {0};
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         read_meta(&actual);
 
-        // verify
+        // 検証
         assert(actual.res_mode == SYS_RES_MODE_UNDEFINED);
         assert(actual.type_code == SYS_TYPE_CODE_UNDEFINED);
 }

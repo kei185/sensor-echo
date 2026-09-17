@@ -17,14 +17,14 @@ void parser_test_set_input(const uint8_t* input, size_t length)
 
 size_t parser_test_bytes_read(void) { return test_read_index; }
 
-/* Host-side replacement for the RX ring-buffer reader used by the parsers. */
+/* parserが使うRXリングバッファ読み出し処理をホストテスト用に置き換える。 */
 int8_t read_byte(void)
 {
         assert(test_read_index < test_input_length);
         return (int8_t)test_input[test_read_index++];
 }
 
-/* Keep byte decoding identical to the target implementation. */
+/* バイト列のデコード方法をターゲット実装と同じにする。 */
 uint32_t dec_little_endian(const uint8_t length)
 {
         uint32_t value = 0u;

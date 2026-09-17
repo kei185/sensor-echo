@@ -7,16 +7,16 @@
 
 static void read_health_frame_clears_every_flag_for_zero_status(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {0x00u};
         ParserHealth  actual;
         memset(&actual, 0xff, sizeof(actual));
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         bool result = read_health_frame(&actual);
 
-        // verify
+        // 検証
         assert(result);
         assert(actual.health == 0u);
         assert(!actual.sensor_abnormal);
@@ -29,15 +29,15 @@ static void read_health_frame_clears_every_flag_for_zero_status(void)
 
 static void read_health_frame_decodes_each_status_bit(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {0x25u};
         ParserHealth  actual  = {0};
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         bool result = read_health_frame(&actual);
 
-        // verify
+        // 検証
         assert(result);
         assert(actual.sensor_abnormal);
         assert(!actual.encoder_abnormal);
@@ -49,14 +49,14 @@ static void read_health_frame_decodes_each_status_bit(void)
 
 static void read_health_frame_rejects_null_output_without_reading(void)
 {
-        // setup
+        // 準備
         const uint8_t input[] = {0x3fu};
         parser_test_set_input(input, sizeof(input));
 
-        // execute
+        // 実行
         bool result = read_health_frame(NULL);
 
-        // verify
+        // 検証
         assert(!result);
         assert(parser_test_bytes_read() == 0u);
 }
