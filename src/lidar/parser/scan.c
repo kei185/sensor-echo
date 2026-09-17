@@ -111,7 +111,7 @@ uint32_t read_scan_frame(ParserScannedPoint* points)
 
         scanMeta.end_angle = read_angle();
 
-        // CSはまだ検証しないが、Siの前にある2byteを読み飛ばして位置を合わせる。
+        // CS is not verified yet, but its two wire bytes must be consumed before Si.
         (void)dec_little_endian(SYS_PACKET_SCAN_CS_SIZE);
 
         // read points and pack them into buf

@@ -69,7 +69,7 @@ static ParserMeta* read_res_len(ParserMeta* pm)
 {
         uint32_t len_mode = dec_little_endian(SYS_PACKET_LEN_MODE_SIZE);
 
-        // 下位30bitは応答長、上位2bitは応答モードを表す。
+        // The low 30 bits are the length; the upper two bits select the mode.
         pm->res_len = len_mode & 0x3fffffffu;
         set_res_mode(pm, (uint8_t)(len_mode >> 30));
 
