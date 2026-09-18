@@ -57,6 +57,12 @@ void reset_arbiter(void) { _ARBITER = (Arbiter){0}; }
 
 void arbitrate(void) { start_next_tx(); }
 
+void record_skipped_rx_read(void)
+{
+        if (_ARBITER.skipped_rx_reads < UINT32_MAX)
+                ++_ARBITER.skipped_rx_reads;
+}
+
 void dma_receive_complete_handler(void)
 {
         increment_lap();

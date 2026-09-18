@@ -233,6 +233,39 @@ static void receive_completion_records_one_dma_ring_wrap(void)
         assert(ARBITER->rx_wraps == 1u);
 }
 
+static void skipped_rx_read_is_recorded(void)
+{
+        // 準備
+        reset_test_state();
+
+        // 実行
+        record_skipped_rx_read();
+
+        // 検証
+        assert(ARBITER->skipped_rx_reads == 1u);
+}
+
+static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
+{
+        // 準備
+        reset_test_state();
+        for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i)
+                queue_frame(i, (uint32_t)(20u + i), (uint8_t)(0x80u + i));
+        arbitrate();
+
+        // 実行
+        for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i)
+                uart_transmit_complete_handler();
+        queue_frame(0u, 30u, 0x90u);
+        arbitrate();
+
+        // 検証
+        assert(release_calls == CORE_TX_BUF_NUM);
+        assert(dma_start_calls == CORE_TX_BUF_NUM + 1u);
+        assert(ARBITER->transmitting == &fake_slots[0]);
+        assert(dma_start_length == 30u);
+}
+
 int main(void)
 {
         arbitrate_starts_the_oldest_queued_frame();
@@ -242,5 +275,7 @@ int main(void)
         invalid_queued_frame_is_dropped_before_starting_the_next_frame();
         transmit_error_drops_the_active_frame_and_starts_the_next_frame();
         receive_completion_records_one_dma_ring_wrap();
+        skipped_rx_read_is_recorded();
+        transmit_queue_returns_to_the_first_slot_after_wraparound();
         return 0;
 }
