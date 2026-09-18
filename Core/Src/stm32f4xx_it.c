@@ -22,6 +22,7 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "arbiter.h"
 #include "motor.h"
 /* USER CODE END Includes */
 
@@ -61,6 +62,7 @@ extern DMA_HandleTypeDef  hdma_uart4_rx;
 extern DMA_HandleTypeDef  hdma_usart2_tx;
 extern UART_HandleTypeDef huart4;
 /* USER CODE BEGIN EV */
+extern UART_HandleTypeDef huart2;
 
 /* USER CODE END EV */
 
@@ -253,6 +255,14 @@ void UART4_IRQHandler(void)
         /* USER CODE END UART4_IRQn 1 */
 }
 
+/**
+ * @brief This function handles USART2 global interrupt.
+ */
+void USART2_IRQHandler(void)
+{
+        HAL_UART_IRQHandler(&huart2);
+}
+
 /* USER CODE BEGIN 1 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
@@ -260,6 +270,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
         GPIOA->ODR ^= GPIO_PIN_5;
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
+{
+        if (huart == &huart4)
+                dma_receive_complete_handler();
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
+{
+        if (huart == &huart2)
+                uart_transmit_complete_handler();
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
+{
+        if (huart == &huart2)
+                uart_transmit_error_handler();
+}
 
 /* USER CODE END 1 */

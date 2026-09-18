@@ -32,6 +32,9 @@ void loop()
         init_arbiter();
 
         while (1) {
+                // Retry a queued TX frame if a previous DMA start was busy.
+                arbitrate();
+
                 // if (scan_stop_requested)
                 // stop scan and send ack
 
@@ -41,7 +44,23 @@ void loop()
                 // if (enc_arrived)
                 //  translate_enc();
 
-                // translate(int8_t *to)
+                TxBufSlot* tbs = get_empty_buf();
+                if (tbs == NULL)
+                        continue;
+
+                if (is_lapped()) {
+                        reset_read_idx();
+                        continue;
+                }
+
+                size_t len = translate(tbs->_buf);
+                if (len == 0u || is_lapped()) {
+                        reset_read_idx();
+                        continue;
+                }
+
+                push_full_slot(tbs, (uint32_t)len);
+                arbitrate();
         }
 }
 
