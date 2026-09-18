@@ -16,7 +16,7 @@ static RxBuf  _RX_BUF = {
 };
 const RxBuf* const RX_BUF = &_RX_BUF;
 
-inline uint32_t next_idx()
+static inline uint32_t next_idx(void)
 {
         uint32_t n = _RX_BUF.read_idx + 1;
 
@@ -26,13 +26,16 @@ inline uint32_t next_idx()
         return n;
 };
 
-inline void increment()
+static inline void increment(void)
 {
         if (++_RX_BUF.read_idx >= CORE_RX_BUF_SIZE)
                 _RX_BUF.read_idx = 0;
 }
 
-inline uint32_t write_idx() { return CORE_RX_BUF_SIZE - *_RX_BUF.remain_bytes; }
+static inline uint32_t write_idx(void)
+{
+        return CORE_RX_BUF_SIZE - *_RX_BUF.remain_bytes;
+}
 
 bool is_lapped()
 
@@ -118,13 +121,14 @@ static TxBuf _TX_BUF = {
 
 const TxBuf* const TX_BUF = &_TX_BUF;
 
-inline bool full(void) { return _TX_BUF.slots[_TX_BUF.writer_head].full; }
+static inline bool full(void) { return _TX_BUF.slots[_TX_BUF.writer_head].full; }
 
 // reader release buf setting it empty when transmission done
 void release(TxBufSlot* slot)
 {
-        slot->full   = false;
         slot->length = 0;
+        __DMB();
+        slot->full = false;
 
         // let head point to the next read target
         if (++_TX_BUF.reader_head >= CORE_TX_BUF_NUM)
@@ -150,9 +154,16 @@ TxBufSlot* get_empty_buf(void)
 
         TxBufSlot* writer_slot = &_TX_BUF.slots[_TX_BUF.writer_head];
 
+        return writer_slot;
+}
+
+void push_full_slot(TxBufSlot* slot, uint32_t len)
+{
+        slot->length = len;
+        __DMB();
+        slot->full = true;
+
         // let head point to the next write target
         if (++_TX_BUF.writer_head >= CORE_TX_BUF_NUM)
                 _TX_BUF.writer_head = 0;
-
-        return writer_slot;
 }
