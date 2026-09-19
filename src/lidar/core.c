@@ -150,9 +150,15 @@ TxBufSlot* get_empty_buf(void)
 
         TxBufSlot* writer_slot = &_TX_BUF.slots[_TX_BUF.writer_head];
 
+        return writer_slot;
+}
+
+void push_full_slot(TxBufSlot* slot, uint32_t len)
+{
+        slot->length = len;
+        slot->full   = true;
+
         // let head point to the next write target
         if (++_TX_BUF.writer_head >= CORE_TX_BUF_NUM)
                 _TX_BUF.writer_head = 0;
-
-        return writer_slot;
 }

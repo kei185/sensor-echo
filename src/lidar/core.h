@@ -19,6 +19,7 @@ typedef struct RxBuf
 extern const RxBuf* const RX_BUF;
 
 bool     is_lapped(void);
+void     reset_read_idx(void);
 void     increment_lap(void);
 bool     is_safe_read(void);
 int8_t   read_byte();
@@ -30,9 +31,9 @@ uint32_t dec_little_endian(const uint8_t);
 typedef struct
 {
 
-        bool     full;
-        uint32_t length;
-        int8_t   _buf[CORE_TX_BUF_SIZE];
+        volatile bool full;
+        uint32_t      length;
+        int8_t        _buf[CORE_TX_BUF_SIZE];
 } TxBufSlot;
 
 typedef struct TxBufQueue
@@ -45,6 +46,7 @@ typedef struct TxBufQueue
 void       release(TxBufSlot*);
 TxBufSlot* get_full_buf(void);
 TxBufSlot* get_empty_buf(void);
+void       push_full_slot(TxBufSlot*, uint32_t);
 
 extern const TxBuf* const TX_BUF;
 

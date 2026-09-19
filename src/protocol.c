@@ -23,8 +23,8 @@ static const char DEVICE_INFO_MESSAGE_FORMAT[] =
 static const char HEALTH_MESSAGE_FORMAT[] =
         "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X\r\n";
 
-bool imu_arrived;
-bool enc_arrived;
+// bool imu_arrived = false;
+// bool enc_arrived = false;
 void loop()
 {
         HAL_UART_Transmit(&huart2, (uint8_t*)"DEVICE INITIALIZING...\r\n", 22, 100);
@@ -41,7 +41,23 @@ void loop()
                 // if (enc_arrived)
                 //  translate_enc();
 
-                // translate(int8_t *to)
+                TxBufSlot* tbs = get_empty_buf();
+                if (tbs == NULL)
+                        continue;
+
+                if (is_lapped()) {
+                        reset_read_idx();
+                        continue;
+                }
+
+                size_t len = translate(tbs->_buf);
+
+                if (len == 0 || is_lapped()) {
+                        reset_read_idx();
+                        continue;
+                }
+
+                push_full_slot(tbs, len);
         }
 }
 

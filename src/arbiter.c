@@ -4,23 +4,16 @@
 #include <stdint.h>
 
 #include "main.h"
+#include "stm32f4xx_hal_dma.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/sys.h"
 #include "tx/frame.h"
 #include "arbiter.h"
+#include "lidar/core.h"
 
 Arbiter _ARBITER = {};
 
 const Arbiter* const ARBITER = &_ARBITER;
-
-/**
- * when DMA RX completion
- *
- */
-void arbitrate()
-{
-        // TODO
-}
 
 void init_arbiter()
 {
@@ -35,4 +28,18 @@ void init_arbiter()
         HAL_UART_Receive(&huart2, rx_buf, COMMAND_SIZE, 100);
 
         // TODO set dma it and start scan
+}
+
+void dma_receive_complete_handler() { increment_lap(); }
+void uart_transmit_complete_handler()
+{
+        static TxBufSlot* target = NULL;
+
+        if (target != NULL)
+                release(target);
+
+        target = get_full_buf();
+
+        //  HAL_DMA_Start_IT(DMA_HandleTypeDef *hdma, uint32_t SrcAddress, uint32_t
+        //  DstAddress, uint32_t DataLength)
 }
