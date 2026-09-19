@@ -169,12 +169,11 @@ void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state)
         record_event(EVENT_FAILURE_PIN_SET);
 }
 
-bool setup_blocking_rx(size_t length)
+void setup_blocking_rx(size_t length)
 {
         assert(length <= sizeof(rx_storage));
         rx_buf.read_idx = 0u;
         rx_buf.lap      = 0u;
-        return length > 0u;
 }
 
 size_t translate(int8_t* to)

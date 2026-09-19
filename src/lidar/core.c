@@ -124,17 +124,13 @@ uint32_t dec_little_endian(const uint8_t len)
         return ret;
 }
 
-bool setup_blocking_rx(size_t length)
+void setup_blocking_rx(size_t length)
 {
-        if (length == 0u || length > CORE_RX_BUF_SIZE - BLOCKING_READ_GUARD_SIZE)
-                return false;
-
         _RX_BUF.read_idx = 0u;
         _RX_BUF.lap      = 0u;
         blocking_remain_bytes =
                 CORE_RX_BUF_SIZE - (uint32_t)length - BLOCKING_READ_GUARD_SIZE;
         _RX_BUF.remain_bytes = &blocking_remain_bytes;
-        return true;
 }
 
 void setup_nonblocking_rx(void)

@@ -80,9 +80,7 @@ static bool request_and_forward_lidar_reply(
         if (request_status != HAL_OK)
                 return false;
 
-        bool blocking_rx_ready = setup_blocking_rx(reply_length);
-        if (!blocking_rx_ready)
-                return false;
+        setup_blocking_rx(reply_length);
 
         uint8_t*          reply          = (uint8_t*)RX_BUF->_buf;
         HAL_StatusTypeDef receive_status = HAL_UART_Receive(
