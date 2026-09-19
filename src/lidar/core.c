@@ -13,22 +13,16 @@
 #define BLOCKING_READ_GUARD_SIZE 2u
 
 static int8_t rx_storage[CORE_RX_BUF_SIZE];
-static RxBuf  dma_rx_buf = {
+
+static RxBuf _RX_BUF = {
         .lap          = false,
         .remain_bytes = &DMA1_Stream2->NDTR,
         ._buf         = rx_storage,
         .read_idx     = 0,
 };
-static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
-static RxBuf             blocking_rx_buf       = {
-        .lap          = false,
-        .remain_bytes = &blocking_remain_bytes,
-        ._buf         = rx_storage,
-        .read_idx     = 0,
-};
-static RxBuf* active_rx_buf = &dma_rx_buf;
+const RxBuf* const RX_BUF = &_RX_BUF;
 
-#define _RX_BUF (*active_rx_buf)
+static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
 
 static inline uint32_t next_idx(void)
 {
@@ -126,25 +120,23 @@ bool setup_blocking_rx(const uint8_t* data, size_t length)
             length > CORE_RX_BUF_SIZE - BLOCKING_READ_GUARD_SIZE)
                 return false;
 
-        memcpy(blocking_rx_buf._buf, data, length);
-        blocking_rx_buf.read_idx = 0u;
-        blocking_rx_buf.lap      = 0u;
+        memcpy(_RX_BUF._buf, data, length);
+        _RX_BUF.read_idx = 0u;
+        _RX_BUF.lap      = 0u;
         blocking_remain_bytes =
                 CORE_RX_BUF_SIZE - (uint32_t)length - BLOCKING_READ_GUARD_SIZE;
-        active_rx_buf = &blocking_rx_buf;
+        _RX_BUF.remain_bytes = &blocking_remain_bytes;
         return true;
 }
 
 bool setup_nonblocking_rx(void)
 {
-        dma_rx_buf.read_idx = 0u;
-        dma_rx_buf.lap      = 0u;
-        active_rx_buf       = &dma_rx_buf;
+        _RX_BUF.read_idx     = 0u;
+        _RX_BUF.lap          = 0u;
+        _RX_BUF.remain_bytes = &DMA1_Stream2->NDTR;
 
-        return HAL_UART_Receive_DMA(
-                       &huart4,
-                       (uint8_t*)dma_rx_buf._buf,
-                       CORE_RX_BUF_SIZE) == HAL_OK;
+        return HAL_UART_Receive_DMA(&huart4, (uint8_t*)_RX_BUF._buf, CORE_RX_BUF_SIZE) ==
+               HAL_OK;
 }
 
 static TxBuf _TX_BUF = {

@@ -17,6 +17,8 @@ typedef struct RxBuf
         uint32_t           read_idx;
 } RxBuf;
 
+extern const RxBuf* const RX_BUF;
+
 bool     is_lapped(void);
 void     reset_read_idx(void);
 void     increment_lap(void);
