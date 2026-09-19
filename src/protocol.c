@@ -33,7 +33,7 @@ void loop()
 
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.
-                arbitrate();
+                try_dispatch_tx();
 
                 // if (scan_stop_requested)
                 // stop scan and send ack
@@ -60,7 +60,7 @@ void loop()
                 }
 
                 push_full_slot(tbs, (uint32_t)len);
-                arbitrate();
+                try_dispatch_tx();
         }
 }
 

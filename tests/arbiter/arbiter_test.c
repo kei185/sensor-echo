@@ -102,14 +102,14 @@ HAL_StatusTypeDef HAL_UART_Receive(
         return HAL_OK;
 }
 
-static void arbitrate_starts_the_oldest_queued_frame(void)
+static void try_dispatch_tx_starts_the_oldest_queued_frame(void)
 {
         // 準備
         reset_test_state();
         queue_frame(0u, 24u, 0x31u);
 
         // 実行
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(dma_start_calls == 1u);
@@ -118,16 +118,16 @@ static void arbitrate_starts_the_oldest_queued_frame(void)
         assert(fake_slots[0].full);
 }
 
-static void arbitrate_does_not_start_a_second_concurrent_transfer(void)
+static void try_dispatch_tx_does_not_start_a_second_concurrent_transfer(void)
 {
         // 準備
         reset_test_state();
         queue_frame(0u, 12u, 0x41u);
         queue_frame(1u, 13u, 0x42u);
-        arbitrate();
+        try_dispatch_tx();
 
         // 実行
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(dma_start_calls == 1u);
@@ -140,7 +140,7 @@ static void transmit_completion_releases_the_slot_and_starts_the_next_frame(void
         reset_test_state();
         queue_frame(0u, 12u, 0x51u);
         queue_frame(1u, 13u, 0x52u);
-        arbitrate();
+        try_dispatch_tx();
         huart2.gState = HAL_UART_STATE_READY;
 
         // 実行
@@ -162,7 +162,7 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
         dma_start_result = HAL_BUSY;
 
         // 実行
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(dma_start_calls == 1u);
@@ -173,7 +173,7 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
         dma_start_result = HAL_OK;
 
         // 実行
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(dma_start_calls == 2u);
@@ -187,7 +187,7 @@ static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
         queue_frame(1u, 14u, 0x72u);
 
         // 実行
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(release_calls == 1u);
@@ -213,7 +213,7 @@ static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
         reset_test_state();
         for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i)
                 queue_frame(i, (uint32_t)(20u + i), (uint8_t)(0x80u + i));
-        arbitrate();
+        try_dispatch_tx();
 
         // 実行
         for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i) {
@@ -221,7 +221,7 @@ static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
                 uart_transmit_complete_handler();
         }
         queue_frame(0u, 30u, 0x90u);
-        arbitrate();
+        try_dispatch_tx();
 
         // 検証
         assert(release_calls == CORE_TX_BUF_NUM);
@@ -231,8 +231,8 @@ static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
 
 int main(void)
 {
-        arbitrate_starts_the_oldest_queued_frame();
-        arbitrate_does_not_start_a_second_concurrent_transfer();
+        try_dispatch_tx_starts_the_oldest_queued_frame();
+        try_dispatch_tx_does_not_start_a_second_concurrent_transfer();
         transmit_completion_releases_the_slot_and_starts_the_next_frame();
         dma_start_failure_keeps_the_frame_queued_for_retry();
         invalid_queued_frame_is_dropped_before_starting_the_next_frame();

@@ -15,13 +15,14 @@ static bool is_valid_tx_frame(const TxBufSlot* slot)
         return slot->length > 0u && slot->length <= CORE_TX_BUF_SIZE;
 }
 
-void arbitrate(void)
+void try_dispatch_tx(void)
 {
         // The HAL TX state owns the queue head until transmission completes.
         if (huart2.gState != HAL_UART_STATE_READY)
                 return;
 
         TxBufSlot* target = get_full_buf();
+        // Discard invalid slots at the queue head until a valid frame is found.
         while (target != NULL && !is_valid_tx_frame(target)) {
                 release(target);
                 target = get_full_buf();
@@ -45,7 +46,7 @@ void uart_transmit_complete_handler(void)
         if (completed != NULL)
                 release(completed);
 
-        arbitrate();
+        try_dispatch_tx();
 }
 
 void init_arbiter(void)
