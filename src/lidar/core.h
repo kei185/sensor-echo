@@ -17,16 +17,14 @@ typedef struct RxBuf
         uint32_t           read_idx;
 } RxBuf;
 
-extern const RxBuf* const RX_BUF;
-
 bool     is_lapped(void);
 void     reset_read_idx(void);
 void     increment_lap(void);
 bool     is_safe_read(void);
 int8_t   read_byte();
 uint32_t dec_little_endian(const uint8_t);
-bool     load_blocking_rx(const uint8_t* data, size_t length);
-bool     start_lidar_rx_dma(void);
+bool     setup_blocking_rx(const uint8_t* data, size_t length);
+bool     setup_nonblocking_rx(void);
 
 #define CORE_TX_BUF_SIZE 1344u // bytes in each TX slot; 3 slots = 4032 bytes
 #define CORE_TX_BUF_NUM  5u

@@ -44,10 +44,14 @@ Each command is exactly two bytes and has no terminator.
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
 |---| ---|---|---|---|---|
-|0xAA55|-|-| 0x00  system| -|system message | 
 |0xAA55|-|-| 0x01  Lidar |-| point data| 
 |0xAA55|-|-| 0x02  IMU | -|kinematic data| 
 |0xAA55|-|-| 0x03  Encoder |-| odometry data| 
+|0xAA55|-|-| 0x04  Initializing |-| `INITIALIZING\r\n` |
+|0xAA55|-|-| 0x05  Device information |-| Device information message |
+|0xAA55|-|-| 0x06  Health status |-| Health status message |
+|0xAA55|-|-| 0x07  Ready |-| `READY\r\n` |
+|0xAA55|-|-| 0x08  Startup failed |-| `STARTUP FAILED\r\n` |
 
 The header is 10 bytes. The start-of-frame bytes are `0xAA 0x55`; payload length
 and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
@@ -56,18 +60,18 @@ The timestamp is the controller's millisecond tick when the frame is built.
 
 ### System Message
 
-System message payloads are ASCII text ending in `\r\n`, without a NUL byte.
-The payload starts immediately after the 10-byte TX header. Its length includes
-the two line-ending bytes.
+System message types start at `0x04`; type `0x00` is not used. Their payloads are
+ASCII text ending in `\r\n`, without a NUL byte. The payload starts immediately
+after the 10-byte TX header. Its length includes the two line-ending bytes.
 
-| LiDAR reply | PC system message payload |
-|---|---|
-| Startup begins | `[SENSOR-ECHO] INITIALIZING\r\n` |
-| Health, status byte `0x00` | `[SENSOR-ECHO] LiDAR STATUS: OK \| code=0x00\r\n` |
-| Health, status byte above `0x00` | `[SENSOR-ECHO] LiDAR STATUS: FAULT \| code=0xNN\r\n` |
-| Device information | `[SENSOR-ECHO] LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |
-| Startup completes | `[SENSOR-ECHO] READY\r\n` |
-| Startup fails | `[SENSOR-ECHO] STARTUP FAILED\r\n` |
+| Type | Event | PC system message payload |
+|---|---|---|
+| `0x04` | Startup begins | `INITIALIZING\r\n` |
+| `0x05` | Device information | `LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |
+| `0x06` | Health, status byte `0x00` | `LiDAR STATUS: OK \| code=0x00\r\n` |
+| `0x06` | Health, status byte above `0x00` | `LiDAR STATUS: FAULT \| code=0xNN\r\n` |
+| `0x07` | Startup completes | `READY\r\n` |
+| `0x08` | Startup fails | `STARTUP FAILED\r\n` |
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw

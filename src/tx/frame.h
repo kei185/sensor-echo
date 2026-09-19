@@ -10,10 +10,14 @@ extern const uint8_t START_OF_FRAME[SOF_SIZE];
 
 typedef enum
 {
-        FRAME_TYPE_SYS = 0,
-        FRAME_TYPE_LIDAR,
-        FRAME_TYPE_IMU,
-        FRAME_TYPE_ENC,
+        FRAME_TYPE_LIDAR          = 0x01,
+        FRAME_TYPE_IMU            = 0x02,
+        FRAME_TYPE_ENC            = 0x03,
+        FRAME_TYPE_INITIALIZING   = 0x04,
+        FRAME_TYPE_DEVICE_INFO    = 0x05,
+        FRAME_TYPE_HEALTH_STATUS  = 0x06,
+        FRAME_TYPE_READY          = 0x07,
+        FRAME_TYPE_STARTUP_FAILED = 0x08,
 } FrameType;
 
 typedef enum

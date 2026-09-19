@@ -9,17 +9,26 @@
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
+// The blocking parser keeps the same two-byte safety margin as the DMA reader.
+#define BLOCKING_READ_GUARD_SIZE 2u
+
 static int8_t rx_storage[CORE_RX_BUF_SIZE];
-static RxBuf  _RX_BUF = {
+static RxBuf  dma_rx_buf = {
         .lap          = false,
         .remain_bytes = &DMA1_Stream2->NDTR,
         ._buf         = rx_storage,
         .read_idx     = 0,
 };
-const RxBuf* const RX_BUF = &_RX_BUF;
+static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
+static RxBuf             blocking_rx_buf       = {
+        .lap          = false,
+        .remain_bytes = &blocking_remain_bytes,
+        ._buf         = rx_storage,
+        .read_idx     = 0,
+};
+static RxBuf* active_rx_buf = &dma_rx_buf;
 
-static bool     blocking_rx_loaded;
-static uint32_t blocking_write_idx;
+#define _RX_BUF (*active_rx_buf)
 
 static inline uint32_t next_idx(void)
 {
@@ -39,18 +48,12 @@ static inline void increment(void)
 
 static inline uint32_t write_idx(void)
 {
-        if (blocking_rx_loaded)
-                return blocking_write_idx;
-
         return CORE_RX_BUF_SIZE - *_RX_BUF.remain_bytes;
 }
 
 bool is_lapped()
 
 {
-        if (blocking_rx_loaded)
-                return false;
-
         return (_RX_BUF.lap >= 1 && write_idx() - _RX_BUF.read_idx > 0) ||
                _RX_BUF.lap > 1;
 }
@@ -72,9 +75,6 @@ void increment_lap() { _RX_BUF.lap++; }
  */
 bool is_safe_read()
 {
-        if (blocking_rx_loaded)
-                return _RX_BUF.read_idx < blocking_write_idx;
-
         int32_t diff = (write_idx() - next_idx());
 
         if (abs(diff) <= 1)
@@ -120,28 +120,31 @@ uint32_t dec_little_endian(const uint8_t len)
         return ret;
 }
 
-bool load_blocking_rx(const uint8_t* data, size_t length)
+bool setup_blocking_rx(const uint8_t* data, size_t length)
 {
-        if (data == NULL || length == 0u || length >= CORE_RX_BUF_SIZE)
+        if (data == NULL || length == 0u ||
+            length > CORE_RX_BUF_SIZE - BLOCKING_READ_GUARD_SIZE)
                 return false;
 
-        memcpy(_RX_BUF._buf, data, length);
-        _RX_BUF.read_idx   = 0u;
-        _RX_BUF.lap        = 0u;
-        blocking_write_idx = (uint32_t)length;
-        blocking_rx_loaded = true;
+        memcpy(blocking_rx_buf._buf, data, length);
+        blocking_rx_buf.read_idx = 0u;
+        blocking_rx_buf.lap      = 0u;
+        blocking_remain_bytes =
+                CORE_RX_BUF_SIZE - (uint32_t)length - BLOCKING_READ_GUARD_SIZE;
+        active_rx_buf = &blocking_rx_buf;
         return true;
 }
 
-bool start_lidar_rx_dma(void)
+bool setup_nonblocking_rx(void)
 {
-        _RX_BUF.read_idx   = 0u;
-        _RX_BUF.lap        = 0u;
-        blocking_write_idx = 0u;
-        blocking_rx_loaded = false;
+        dma_rx_buf.read_idx = 0u;
+        dma_rx_buf.lap      = 0u;
+        active_rx_buf       = &dma_rx_buf;
 
-        return HAL_UART_Receive_DMA(&huart4, (uint8_t*)_RX_BUF._buf, CORE_RX_BUF_SIZE) ==
-               HAL_OK;
+        return HAL_UART_Receive_DMA(
+                       &huart4,
+                       (uint8_t*)dma_rx_buf._buf,
+                       CORE_RX_BUF_SIZE) == HAL_OK;
 }
 
 static TxBuf _TX_BUF = {

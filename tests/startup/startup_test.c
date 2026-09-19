@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "main.h"
 #include "startup.h"
 #include "lidar/core.h"
 #include "lidar/sys.h"
@@ -13,6 +14,7 @@
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart4;
+GPIO_TypeDef       initial_handshake_failed_port;
 
 typedef enum
 {
@@ -24,6 +26,7 @@ typedef enum
         EVENT_PC_READY,
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
+        EVENT_FAILURE_PIN_SET,
         EVENT_PC_FAILURE,
 } Event;
 
@@ -95,13 +98,16 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         }
 
         assert(huart == &huart2);
-        if (payload_equals(data, length, "[SENSOR-ECHO] INITIALIZING\r\n"))
+        if (payload_equals(data, length, "INITIALIZING\r\n")) {
+                assert(data[5] == FRAME_TYPE_INITIALIZING);
                 record_event(EVENT_PC_INITIALIZING);
-        else if (payload_equals(data, length, "[SENSOR-ECHO] READY\r\n"))
+        } else if (payload_equals(data, length, "READY\r\n")) {
+                assert(data[5] == FRAME_TYPE_READY);
                 record_event(EVENT_PC_READY);
-        else if (payload_equals(data, length, "[SENSOR-ECHO] STARTUP FAILED\r\n"))
+        } else if (payload_equals(data, length, "STARTUP FAILED\r\n")) {
+                assert(data[5] == FRAME_TYPE_STARTUP_FAILED);
                 record_event(EVENT_PC_FAILURE);
-        else {
+        } else {
                 assert(length == 1u);
                 if (data[0] == SYS_TYPE_CODE_DEVICE_INFO)
                         record_event(EVENT_PC_DEVICE_INFO);
@@ -149,7 +155,15 @@ uint32_t HAL_GetTick(void) { return 1234u; }
 
 TxBufSlot* get_empty_buf(void) { return &startup_slot; }
 
-bool load_blocking_rx(const uint8_t* data, size_t length)
+void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state)
+{
+        assert(port == INITIAL_HANDSHAKE_FAILED_GPIO_Port);
+        assert(pin == INITIAL_HANDSHAKE_FAILED_Pin);
+        assert(state == GPIO_PIN_SET);
+        record_event(EVENT_FAILURE_PIN_SET);
+}
+
+bool setup_blocking_rx(const uint8_t* data, size_t length)
 {
         assert(data != NULL);
         assert(length == SYS_PACKET_META_SIZE + data[2]);
@@ -166,7 +180,7 @@ size_t translate(int8_t* to)
         return 1u;
 }
 
-bool start_lidar_rx_dma(void)
+bool setup_nonblocking_rx(void)
 {
         record_event(EVENT_DMA_STARTED);
         return true;
@@ -211,6 +225,7 @@ static void invalid_health_reply_stops_startup(void)
                 EVENT_LIDAR_DEVICE_REQUEST,
                 EVENT_PC_DEVICE_INFO,
                 EVENT_LIDAR_HEALTH_REQUEST,
+                EVENT_FAILURE_PIN_SET,
                 EVENT_PC_FAILURE,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
