@@ -37,8 +37,14 @@ static size_t    event_count;
 static uint32_t  lidar_receive_count;
 static uint32_t  pc_receive_count;
 static bool      malformed_health_reply;
-static uint8_t   loaded_reply_type;
 static TxBufSlot startup_slot;
+static int8_t    rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
+static uint32_t  rx_remain_bytes;
+static RxBuf     rx_buf = {
+        .remain_bytes = &rx_remain_bytes,
+        ._buf         = rx_storage,
+};
+const RxBuf* const RX_BUF = &rx_buf;
 
 static void record_event(Event event)
 {
@@ -61,8 +67,8 @@ static void reset_test_state(void)
         lidar_receive_count    = 0u;
         pc_receive_count       = 0u;
         malformed_health_reply = false;
-        loaded_reply_type      = SYS_TYPE_CODE_UNDEFINED;
         memset(&startup_slot, 0, sizeof(startup_slot));
+        memset(rx_storage, 0, sizeof(rx_storage));
 }
 
 static void
@@ -163,20 +169,21 @@ void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state)
         record_event(EVENT_FAILURE_PIN_SET);
 }
 
-bool setup_blocking_rx(const uint8_t* data, size_t length)
+bool setup_blocking_rx(size_t length)
 {
-        assert(data != NULL);
-        assert(length == SYS_PACKET_META_SIZE + data[2]);
-        loaded_reply_type = data[6];
-        return true;
+        assert(length <= sizeof(rx_storage));
+        rx_buf.read_idx = 0u;
+        rx_buf.lap      = 0u;
+        return length > 0u;
 }
 
 size_t translate(int8_t* to)
 {
         assert(to != NULL);
-        assert(loaded_reply_type == SYS_TYPE_CODE_DEVICE_INFO ||
-               loaded_reply_type == SYS_TYPE_CODE_HEALTH);
-        to[0] = (int8_t)loaded_reply_type;
+        uint8_t reply_type = (uint8_t)RX_BUF->_buf[6];
+        assert(reply_type == SYS_TYPE_CODE_DEVICE_INFO ||
+               reply_type == SYS_TYPE_CODE_HEALTH);
+        to[0] = (int8_t)reply_type;
         return 1u;
 }
 

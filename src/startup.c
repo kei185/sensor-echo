@@ -70,8 +70,7 @@ static bool is_expected_lidar_reply(
 static bool request_and_forward_lidar_reply(
         uint8_t* tx_frame, MsgType command, uint32_t content_length, SysTypeCode type)
 {
-        uint8_t reply[SYS_PACKET_DEVICE_INFO_FRAME_SIZE] = {0};
-        size_t  reply_length = SYS_PACKET_META_SIZE + content_length;
+        size_t reply_length = SYS_PACKET_META_SIZE + content_length;
 
         HAL_StatusTypeDef request_status = HAL_UART_Transmit(
                 &huart4,
@@ -81,6 +80,11 @@ static bool request_and_forward_lidar_reply(
         if (request_status != HAL_OK)
                 return false;
 
+        bool blocking_rx_ready = setup_blocking_rx(reply_length);
+        if (!blocking_rx_ready)
+                return false;
+
+        uint8_t*          reply          = (uint8_t*)RX_BUF->_buf;
         HAL_StatusTypeDef receive_status = HAL_UART_Receive(
                 &huart4,
                 reply,
@@ -92,10 +96,6 @@ static bool request_and_forward_lidar_reply(
         bool is_expected_reply =
                 is_expected_lidar_reply(reply, reply_length, content_length, type);
         if (!is_expected_reply)
-                return false;
-
-        bool blocking_rx_ready = setup_blocking_rx(reply, reply_length);
-        if (!blocking_rx_ready)
                 return false;
 
         size_t frame_length = translate((int8_t*)tx_frame);

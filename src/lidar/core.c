@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <cmsis_gcc.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "main.h"
 #include "stm32f446xx.h"
@@ -114,13 +113,11 @@ uint32_t dec_little_endian(const uint8_t len)
         return ret;
 }
 
-bool setup_blocking_rx(const uint8_t* data, size_t length)
+bool setup_blocking_rx(size_t length)
 {
-        if (data == NULL || length == 0u ||
-            length > CORE_RX_BUF_SIZE - BLOCKING_READ_GUARD_SIZE)
+        if (length == 0u || length > CORE_RX_BUF_SIZE - BLOCKING_READ_GUARD_SIZE)
                 return false;
 
-        memcpy(_RX_BUF._buf, data, length);
         _RX_BUF.read_idx = 0u;
         _RX_BUF.lap      = 0u;
         blocking_remain_bytes =

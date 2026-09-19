@@ -25,7 +25,7 @@ void     increment_lap(void);
 bool     is_safe_read(void);
 int8_t   read_byte();
 uint32_t dec_little_endian(const uint8_t);
-bool     setup_blocking_rx(const uint8_t* data, size_t length);
+bool     setup_blocking_rx(size_t length);
 bool     setup_nonblocking_rx(void);
 
 #define CORE_TX_BUF_SIZE 1344u // bytes in each TX slot; 3 slots = 4032 bytes
