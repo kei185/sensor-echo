@@ -8,7 +8,19 @@
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
-// The blocking parser keeps the same two-byte safety margin as the DMA reader.
+/*
+ * is_safe_read() requires:
+ *
+ *     write_idx - (read_idx + 1) > 1
+ *
+ * which is equivalent to:
+ *
+ *     read_idx < write_idx - 2
+ *
+ * A blocking reply has no moving DMA write head, so expose a virtual write
+ * position two bytes past the received data. This makes the last real byte
+ * readable while the virtual guard bytes remain unreadable.
+ */
 #define BLOCKING_READ_GUARD_SIZE 2u
 
 static int8_t rx_storage[CORE_RX_BUF_SIZE];
