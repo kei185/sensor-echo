@@ -282,10 +282,4 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
                 uart_transmit_complete_handler();
 }
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
-{
-        if (huart == &huart2)
-                uart_transmit_error_handler();
-}
-
 /* USER CODE END 1 */

@@ -39,7 +39,7 @@ static void reset_test_state(void)
         dma_start_calls     = 0u;
         dma_start_data      = NULL;
         dma_start_length    = 0u;
-        reset_arbiter();
+        huart2.gState       = HAL_UART_STATE_READY;
 }
 
 static void queue_frame(uint8_t index, uint32_t length, uint8_t marker)
@@ -71,9 +71,14 @@ HAL_StatusTypeDef
 HAL_UART_Transmit_DMA(UART_HandleTypeDef* huart, const uint8_t* data, uint16_t length)
 {
         assert(huart == &huart2);
+        if (huart->gState != HAL_UART_STATE_READY)
+                return HAL_BUSY;
+
         ++dma_start_calls;
         dma_start_data   = data;
         dma_start_length = length;
+        if (dma_start_result == HAL_OK)
+                huart->gState = HAL_UART_STATE_BUSY_TX;
         return dma_start_result;
 }
 
@@ -110,7 +115,6 @@ static void arbitrate_starts_the_oldest_queued_frame(void)
         assert(dma_start_calls == 1u);
         assert(dma_start_data == (const uint8_t*)fake_slots[0]._buf);
         assert(dma_start_length == 24u);
-        assert(ARBITER->transmitting == &fake_slots[0]);
         assert(fake_slots[0].full);
 }
 
@@ -127,7 +131,6 @@ static void arbitrate_does_not_start_a_second_concurrent_transfer(void)
 
         // 検証
         assert(dma_start_calls == 1u);
-        assert(ARBITER->transmitting == &fake_slots[0]);
         assert(release_calls == 0u);
 }
 
@@ -138,6 +141,7 @@ static void transmit_completion_releases_the_slot_and_starts_the_next_frame(void
         queue_frame(0u, 12u, 0x51u);
         queue_frame(1u, 13u, 0x52u);
         arbitrate();
+        huart2.gState = HAL_UART_STATE_READY;
 
         // 実行
         uart_transmit_complete_handler();
@@ -148,7 +152,6 @@ static void transmit_completion_releases_the_slot_and_starts_the_next_frame(void
         assert(dma_start_calls == 2u);
         assert(dma_start_data == (const uint8_t*)fake_slots[1]._buf);
         assert(dma_start_length == 13u);
-        assert(ARBITER->transmitting == &fake_slots[1]);
 }
 
 static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
@@ -163,7 +166,6 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
 
         // 検証
         assert(dma_start_calls == 1u);
-        assert(ARBITER->transmitting == NULL);
         assert(fake_slots[0].full);
         assert(release_calls == 0u);
 
@@ -175,7 +177,6 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
 
         // 検証
         assert(dma_start_calls == 2u);
-        assert(ARBITER->transmitting == &fake_slots[0]);
 }
 
 static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
@@ -192,25 +193,6 @@ static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
         assert(release_calls == 1u);
         assert(!fake_slots[0].full);
         assert(dma_start_calls == 1u);
-        assert(ARBITER->transmitting == &fake_slots[1]);
-}
-
-static void transmit_error_drops_the_active_frame_and_starts_the_next_frame(void)
-{
-        // 準備
-        reset_test_state();
-        queue_frame(0u, 20u, 0x21u);
-        queue_frame(1u, 21u, 0x22u);
-        arbitrate();
-
-        // 実行
-        uart_transmit_error_handler();
-
-        // 検証
-        assert(release_calls == 1u);
-        assert(!fake_slots[0].full);
-        assert(dma_start_calls == 2u);
-        assert(ARBITER->transmitting == &fake_slots[1]);
 }
 
 static void receive_completion_records_one_dma_ring_wrap(void)
@@ -225,18 +207,6 @@ static void receive_completion_records_one_dma_ring_wrap(void)
         assert(lap_increment_calls == 1u);
 }
 
-static void skipped_rx_read_is_recorded(void)
-{
-        // 準備
-        reset_test_state();
-
-        // 実行
-        record_skipped_rx_read();
-
-        // 検証
-        assert(ARBITER->skipped_rx_reads == 1u);
-}
-
 static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
 {
         // 準備
@@ -246,15 +216,16 @@ static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
         arbitrate();
 
         // 実行
-        for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i)
+        for (uint8_t i = 0u; i < CORE_TX_BUF_NUM; ++i) {
+                huart2.gState = HAL_UART_STATE_READY;
                 uart_transmit_complete_handler();
+        }
         queue_frame(0u, 30u, 0x90u);
         arbitrate();
 
         // 検証
         assert(release_calls == CORE_TX_BUF_NUM);
         assert(dma_start_calls == CORE_TX_BUF_NUM + 1u);
-        assert(ARBITER->transmitting == &fake_slots[0]);
         assert(dma_start_length == 30u);
 }
 
@@ -265,9 +236,7 @@ int main(void)
         transmit_completion_releases_the_slot_and_starts_the_next_frame();
         dma_start_failure_keeps_the_frame_queued_for_retry();
         invalid_queued_frame_is_dropped_before_starting_the_next_frame();
-        transmit_error_drops_the_active_frame_and_starts_the_next_frame();
         receive_completion_records_one_dma_ring_wrap();
-        skipped_rx_read_is_recorded();
         transmit_queue_returns_to_the_first_slot_after_wraparound();
         return 0;
 }

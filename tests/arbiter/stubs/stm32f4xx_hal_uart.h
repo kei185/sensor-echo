@@ -11,9 +11,16 @@ typedef enum
         HAL_TIMEOUT = 0x03u,
 } HAL_StatusTypeDef;
 
+typedef enum
+{
+        HAL_UART_STATE_READY   = 0x20u,
+        HAL_UART_STATE_BUSY_TX = 0x21u,
+} HAL_UART_StateTypeDef;
+
 typedef struct
 {
-        void* Instance;
+        void*                 Instance;
+        HAL_UART_StateTypeDef gState;
 } UART_HandleTypeDef;
 
 HAL_StatusTypeDef HAL_UART_Transmit(

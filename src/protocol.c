@@ -45,10 +45,8 @@ void loop()
                 //  translate_enc();
 
                 TxBufSlot* tbs = get_empty_buf();
-                if (tbs == NULL) {
-                        record_skipped_rx_read();
+                if (tbs == NULL)
                         continue;
-                }
 
                 if (is_lapped()) {
                         reset_read_idx();
