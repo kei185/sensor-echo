@@ -23,13 +23,6 @@ typedef struct
         HAL_UART_StateTypeDef gState;
 } UART_HandleTypeDef;
 
-HAL_StatusTypeDef HAL_UART_Transmit(
-        UART_HandleTypeDef* huart,
-        const uint8_t*      data,
-        uint16_t            length,
-        uint32_t            timeout);
-HAL_StatusTypeDef HAL_UART_Receive(
-        UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout);
 HAL_StatusTypeDef
 HAL_UART_Transmit_DMA(UART_HandleTypeDef* huart, const uint8_t* data, uint16_t length);
 

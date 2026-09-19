@@ -5,19 +5,9 @@
 
 #include "arbiter.h"
 #include "lidar/core.h"
-#include "lidar/sys.h"
 #include "stm32f4xx_hal_uart.h"
 
 UART_HandleTypeDef huart2;
-UART_HandleTypeDef huart4;
-
-const uint16_t       MSG_SIZE         = 2u;
-static const uint8_t health_command[] = {0xa5u, 0x92u};
-static const uint8_t device_command[] = {0xa5u, 0x90u};
-const uint8_t*       MSG[]            = {
-        [MSG_TYPE_RX_HEALTH]   = health_command,
-        [MSG_TYPE_RX_SYS_INFO] = device_command,
-};
 
 static TxBufSlot fake_slots[CORE_TX_BUF_NUM];
 static uint8_t   fake_reader_head;
@@ -80,26 +70,6 @@ HAL_UART_Transmit_DMA(UART_HandleTypeDef* huart, const uint8_t* data, uint16_t l
         if (dma_start_result == HAL_OK)
                 huart->gState = HAL_UART_STATE_BUSY_TX;
         return dma_start_result;
-}
-
-HAL_StatusTypeDef HAL_UART_Transmit(
-        UART_HandleTypeDef* huart, const uint8_t* data, uint16_t length, uint32_t timeout)
-{
-        (void)huart;
-        (void)data;
-        (void)length;
-        (void)timeout;
-        return HAL_OK;
-}
-
-HAL_StatusTypeDef HAL_UART_Receive(
-        UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout)
-{
-        (void)huart;
-        (void)data;
-        (void)length;
-        (void)timeout;
-        return HAL_OK;
 }
 
 static void try_dispatch_tx_starts_the_oldest_queued_frame(void)

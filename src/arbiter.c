@@ -5,9 +5,7 @@
 
 #include "main.h"
 #include "stm32f4xx_hal_uart.h"
-#include "lidar/sys.h"
 #include "lidar/core.h"
-#include "tx/frame.h"
 #include "arbiter.h"
 
 static bool is_valid_tx_frame(const TxBufSlot* slot)
@@ -47,18 +45,4 @@ void uart_transmit_complete_handler(void)
                 release(completed);
 
         try_dispatch_tx();
-}
-
-void init_arbiter(void)
-{
-        HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_RX_HEALTH], MSG_SIZE, 100);
-        // TODO revcieve message and parse then send it
-
-        HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_RX_SYS_INFO], MSG_SIZE, 100);
-        // TODO revcieve message and parse then send it
-
-        uint8_t rx_buf[COMMAND_SIZE];
-        HAL_UART_Receive(&huart2, rx_buf, COMMAND_SIZE, 100);
-
-        // TODO set dma it and start scan
 }

@@ -8,6 +8,7 @@
 
 #include "arbiter.h"
 #include "protocol.h"
+#include "startup.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 #include "lidar/sys.h"
@@ -27,9 +28,8 @@ static const char HEALTH_MESSAGE_FORMAT[] =
 // bool enc_arrived = false;
 void loop()
 {
-        HAL_UART_Transmit(&huart2, (uint8_t*)"DEVICE INITIALIZING...\r\n", 22, 100);
-
-        init_arbiter();
+        if (!run_startup_sequence())
+                Error_Handler();
 
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.

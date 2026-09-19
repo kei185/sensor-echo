@@ -3,7 +3,9 @@
 #include <stdbool.h>
 #include <cmsis_gcc.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "main.h"
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
@@ -15,6 +17,9 @@ static RxBuf  _RX_BUF = {
         .read_idx     = 0,
 };
 const RxBuf* const RX_BUF = &_RX_BUF;
+
+static bool     blocking_rx_loaded;
+static uint32_t blocking_write_idx;
 
 static inline uint32_t next_idx(void)
 {
@@ -34,12 +39,18 @@ static inline void increment(void)
 
 static inline uint32_t write_idx(void)
 {
+        if (blocking_rx_loaded)
+                return blocking_write_idx;
+
         return CORE_RX_BUF_SIZE - *_RX_BUF.remain_bytes;
 }
 
 bool is_lapped()
 
 {
+        if (blocking_rx_loaded)
+                return false;
+
         return (_RX_BUF.lap >= 1 && write_idx() - _RX_BUF.read_idx > 0) ||
                _RX_BUF.lap > 1;
 }
@@ -61,6 +72,9 @@ void increment_lap() { _RX_BUF.lap++; }
  */
 bool is_safe_read()
 {
+        if (blocking_rx_loaded)
+                return _RX_BUF.read_idx < blocking_write_idx;
+
         int32_t diff = (write_idx() - next_idx());
 
         if (abs(diff) <= 1)
@@ -104,6 +118,30 @@ uint32_t dec_little_endian(const uint8_t len)
                 ret |= (uint32_t)(uint8_t)read_byte() << (i * 8);
 
         return ret;
+}
+
+bool load_blocking_rx(const uint8_t* data, size_t length)
+{
+        if (data == NULL || length == 0u || length >= CORE_RX_BUF_SIZE)
+                return false;
+
+        memcpy(_RX_BUF._buf, data, length);
+        _RX_BUF.read_idx   = 0u;
+        _RX_BUF.lap        = 0u;
+        blocking_write_idx = (uint32_t)length;
+        blocking_rx_loaded = true;
+        return true;
+}
+
+bool start_lidar_rx_dma(void)
+{
+        _RX_BUF.read_idx   = 0u;
+        _RX_BUF.lap        = 0u;
+        blocking_write_idx = 0u;
+        blocking_rx_loaded = false;
+
+        return HAL_UART_Receive_DMA(&huart4, (uint8_t*)_RX_BUF._buf, CORE_RX_BUF_SIZE) ==
+               HAL_OK;
 }
 
 static TxBuf _TX_BUF = {

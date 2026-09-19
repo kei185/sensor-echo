@@ -16,25 +16,16 @@ typedef enum
         FRAME_TYPE_ENC,
 } FrameType;
 
-#define COMMAND_NUM 4u
 typedef enum
 {
-        COMMAND_DEVICE_READY,
-        COMMAND_GET_STAT,
-        COMMAND_SRT_SCAN,
-        COMMAND_END_SCAN,
-        UNDEFINED,
-} COMMAND;
+        PC_COMMAND_GET_STATUS,
+        PC_COMMAND_START_SCAN,
+        PC_COMMAND_END_SCAN,
+        PC_COMMAND_COUNT,
+} PcCommand;
 
-#define COMMAND_SIZE 2u
-#define ACK_SIZE     13u
-typedef struct
-{
-        uint8_t command[COMMAND_SIZE];
-        char    ack[ACK_SIZE];
-} Operation;
+#define PC_COMMAND_SIZE 2u
 
-extern const char      MSG_DEVICE_READY[ACK_SIZE];
-extern const Operation OP[COMMAND_NUM];
+extern const uint8_t PC_COMMANDS[PC_COMMAND_COUNT][PC_COMMAND_SIZE];
 
 #endif
