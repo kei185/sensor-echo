@@ -111,7 +111,6 @@ static void arbitrate_starts_the_oldest_queued_frame(void)
         assert(dma_start_data == (const uint8_t*)fake_slots[0]._buf);
         assert(dma_start_length == 24u);
         assert(ARBITER->transmitting == &fake_slots[0]);
-        assert(ARBITER->tx_started == 1u);
         assert(fake_slots[0].full);
 }
 
@@ -150,8 +149,6 @@ static void transmit_completion_releases_the_slot_and_starts_the_next_frame(void
         assert(dma_start_data == (const uint8_t*)fake_slots[1]._buf);
         assert(dma_start_length == 13u);
         assert(ARBITER->transmitting == &fake_slots[1]);
-        assert(ARBITER->tx_completed == 1u);
-        assert(ARBITER->tx_started == 2u);
 }
 
 static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
@@ -167,7 +164,6 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
         // 検証
         assert(dma_start_calls == 1u);
         assert(ARBITER->transmitting == NULL);
-        assert(ARBITER->tx_start_failures == 1u);
         assert(fake_slots[0].full);
         assert(release_calls == 0u);
 
@@ -180,7 +176,6 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
         // 検証
         assert(dma_start_calls == 2u);
         assert(ARBITER->transmitting == &fake_slots[0]);
-        assert(ARBITER->tx_started == 1u);
 }
 
 static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
@@ -196,7 +191,6 @@ static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
         // 検証
         assert(release_calls == 1u);
         assert(!fake_slots[0].full);
-        assert(ARBITER->invalid_tx_frames == 1u);
         assert(dma_start_calls == 1u);
         assert(ARBITER->transmitting == &fake_slots[1]);
 }
@@ -215,7 +209,6 @@ static void transmit_error_drops_the_active_frame_and_starts_the_next_frame(void
         // 検証
         assert(release_calls == 1u);
         assert(!fake_slots[0].full);
-        assert(ARBITER->tx_transfer_failures == 1u);
         assert(dma_start_calls == 2u);
         assert(ARBITER->transmitting == &fake_slots[1]);
 }
@@ -230,7 +223,6 @@ static void receive_completion_records_one_dma_ring_wrap(void)
 
         // 検証
         assert(lap_increment_calls == 1u);
-        assert(ARBITER->rx_wraps == 1u);
 }
 
 static void skipped_rx_read_is_recorded(void)

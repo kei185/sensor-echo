@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <cmsis_gcc.h>
 #include "main.h"
 #include "stm32f4xx_hal_uart.h"
 #include "lidar/sys.h"
@@ -16,18 +15,16 @@ const Arbiter* const ARBITER = &_ARBITER;
 
 static bool is_valid_tx_frame(const TxBufSlot* slot)
 {
-        return slot->length > 0u && slot->length <= CORE_TX_BUF_SIZE &&
-               slot->length <= UINT16_MAX;
+        return slot->length > 0u && slot->length <= CORE_TX_BUF_SIZE;
 }
 
-static void start_next_tx(void)
+void arbitrate(void)
 {
         if (_ARBITER.transmitting != NULL)
                 return;
 
         TxBufSlot* target = get_full_buf();
         while (target != NULL && !is_valid_tx_frame(target)) {
-                ++_ARBITER.invalid_tx_frames;
                 release(target);
                 target = get_full_buf();
         }
@@ -37,25 +34,15 @@ static void start_next_tx(void)
 
         // Publish ownership before enabling DMA so the callback sees its slot.
         _ARBITER.transmitting = target;
-        __DMB();
-
-        HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(
-                &huart2,
-                (const uint8_t*)target->_buf,
-                (uint16_t)target->length);
-        if (status == HAL_OK) {
-                ++_ARBITER.tx_started;
-                return;
-        }
-
-        // Keep the queued slot full so a later arbitrate() call can retry it.
-        _ARBITER.transmitting = NULL;
-        ++_ARBITER.tx_start_failures;
+        if (HAL_UART_Transmit_DMA(
+                    &huart2,
+                    (const uint8_t*)target->_buf,
+                    (uint16_t)target->length) != HAL_OK)
+                // Keep the slot queued so a later arbitrate() call can retry it.
+                _ARBITER.transmitting = NULL;
 }
 
 void reset_arbiter(void) { _ARBITER = (Arbiter){0}; }
-
-void arbitrate(void) { start_next_tx(); }
 
 void record_skipped_rx_read(void)
 {
@@ -63,11 +50,7 @@ void record_skipped_rx_read(void)
                 ++_ARBITER.skipped_rx_reads;
 }
 
-void dma_receive_complete_handler(void)
-{
-        increment_lap();
-        ++_ARBITER.rx_wraps;
-}
+void dma_receive_complete_handler(void) { increment_lap(); }
 
 void uart_transmit_complete_handler(void)
 {
@@ -77,8 +60,7 @@ void uart_transmit_complete_handler(void)
 
         _ARBITER.transmitting = NULL;
         release(completed);
-        ++_ARBITER.tx_completed;
-        start_next_tx();
+        arbitrate();
 }
 
 void uart_transmit_error_handler(void)
@@ -89,8 +71,7 @@ void uart_transmit_error_handler(void)
 
         _ARBITER.transmitting = NULL;
         release(failed);
-        ++_ARBITER.tx_transfer_failures;
-        start_next_tx();
+        arbitrate();
 }
 
 void init_arbiter(void)
