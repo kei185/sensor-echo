@@ -6,25 +6,8 @@ PC frames. The buffer and throughput estimates below cover LiDAR data only.
 
 ## Startup sequence
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant PC
-    participant Controller
-    participant LiDAR
-
-    Note over PC,LiDAR: Startup uses blocking I/O
-    Controller->>LiDAR: Request status
-    LiDAR-->>Controller: Status response
-    Controller-->>PC: Forward status
-    Controller->>LiDAR: Request device information
-    LiDAR-->>Controller: Device information response
-    Controller-->>PC: Forward device information
-    Controller-->>PC: Device ready notification
-    PC->>Controller: Start scan command
-    Controller->>Controller: Prepare RX DMA and three TX slots
-    Controller->>LiDAR: Start scan
-```
+The startup order, commands, and PC system messages are defined in
+[frame.md](frame.md#startup-sequence).
 
 ## Scan-time DMA arbitration
 

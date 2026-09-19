@@ -1,10 +1,45 @@
-# Rx Frame
-|command | code | ack |
-|---|---| ---|
-| device ready | -        | "DEVICE READY\0"|
-|get status| 0xAA 0xA1| -|
-|start scan| 0xAA 0xA2| "SRT SCAN ACK\0"|
-|end scan  | 0xAA 0xA3| "END SCAN ACK\0"|
+# Startup Sequence
+
+Startup uses blocking UART transfers. Scan data uses DMA after the PC sends the
+start scan command.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant PC
+    participant Controller
+    participant LiDAR
+
+    Controller->>PC: INITIALIZING system frame
+    Controller->>LiDAR: Device information request A5 90
+    LiDAR-->>Controller: Device information response
+    Controller->>PC: Device information system frame
+    Controller->>LiDAR: Health status request A5 92
+    LiDAR-->>Controller: Health status response
+    Controller->>PC: Health status system frame
+    Controller->>PC: READY system frame
+    PC->>Controller: Start scan command AA A2
+    Controller->>Controller: Start circular LiDAR RX DMA
+    Controller->>LiDAR: Start scan command A5 60
+    LiDAR-->>Controller: Continuous scan stream
+```
+
+The controller requests device information and health status while the LiDAR is
+idle. The LiDAR manual allows only the stop command during scanning. RX DMA
+starts before `A5 60`, so the controller can receive the first scan bytes.
+
+If UART communication or reply validation fails, the controller sends a
+`STARTUP FAILED` system frame and does not start scanning.
+
+## PC-to-Controller Commands
+
+Each command is exactly two bytes and has no terminator.
+
+| Command | Code |
+|---|---|
+| Get status | `0xAA 0xA1` |
+| Start scan | `0xAA 0xA2` |
+| End scan | `0xAA 0xA3` |
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
@@ -27,9 +62,12 @@ the two line-ending bytes.
 
 | LiDAR reply | PC system message payload |
 |---|---|
+| Startup begins | `[SENSOR-ECHO] INITIALIZING\r\n` |
 | Health, status byte `0x00` | `[SENSOR-ECHO] LiDAR STATUS: OK \| code=0x00\r\n` |
 | Health, status byte above `0x00` | `[SENSOR-ECHO] LiDAR STATUS: FAULT \| code=0xNN\r\n` |
 | Device information | `[SENSOR-ECHO] LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |
+| Startup completes | `[SENSOR-ECHO] READY\r\n` |
+| Startup fails | `[SENSOR-ECHO] STARTUP FAILED\r\n` |
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw
