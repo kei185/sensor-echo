@@ -187,10 +187,20 @@ size_t translate(int8_t* to)
         return 1u;
 }
 
-bool setup_nonblocking_rx(void)
+void setup_nonblocking_rx(void)
 {
+        rx_buf.read_idx = 0u;
+        rx_buf.lap      = 0u;
+}
+
+HAL_StatusTypeDef
+HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length)
+{
+        assert(huart == &huart4);
+        assert(data == (uint8_t*)RX_BUF->_buf);
+        assert(length == CORE_RX_BUF_SIZE);
         record_event(EVENT_DMA_STARTED);
-        return true;
+        return HAL_OK;
 }
 
 static void startup_follows_the_documented_order(void)

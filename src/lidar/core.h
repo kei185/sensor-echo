@@ -26,7 +26,7 @@ bool     is_safe_read(void);
 int8_t   read_byte();
 uint32_t dec_little_endian(const uint8_t);
 bool     setup_blocking_rx(size_t length);
-bool     setup_nonblocking_rx(void);
+void     setup_nonblocking_rx(void);
 
 #define CORE_TX_BUF_SIZE 1344u // bytes in each TX slot; 3 slots = 4032 bytes
 #define CORE_TX_BUF_NUM  5u

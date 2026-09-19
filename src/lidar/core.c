@@ -4,7 +4,6 @@
 #include <cmsis_gcc.h>
 #include <stdlib.h>
 
-#include "main.h"
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
@@ -26,7 +25,7 @@
 static int8_t rx_storage[CORE_RX_BUF_SIZE];
 
 static RxBuf _RX_BUF = {
-        .lap          = false,
+        .lap          = 0,
         .remain_bytes = &DMA1_Stream2->NDTR,
         ._buf         = rx_storage,
         .read_idx     = 0,
@@ -138,14 +137,11 @@ bool setup_blocking_rx(size_t length)
         return true;
 }
 
-bool setup_nonblocking_rx(void)
+void setup_nonblocking_rx(void)
 {
         _RX_BUF.read_idx     = 0u;
         _RX_BUF.lap          = 0u;
         _RX_BUF.remain_bytes = &DMA1_Stream2->NDTR;
-
-        return HAL_UART_Receive_DMA(&huart4, (uint8_t*)_RX_BUF._buf, CORE_RX_BUF_SIZE) ==
-               HAL_OK;
 }
 
 static TxBuf _TX_BUF = {

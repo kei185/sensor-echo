@@ -25,6 +25,8 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         uint32_t            timeout);
 HAL_StatusTypeDef HAL_UART_Receive(
         UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout);
+HAL_StatusTypeDef
+HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length);
 uint32_t HAL_GetTick(void);
 
 #endif /* STARTUP_TEST_STM32F4XX_HAL_UART_H */

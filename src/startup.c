@@ -188,8 +188,10 @@ bool run_startup_sequence(void)
                 return fail_startup(tx_frame);
 
         // Arm RX before the scan command so the first scan bytes cannot be lost.
-        bool nonblocking_rx_ready = setup_nonblocking_rx();
-        if (!nonblocking_rx_ready)
+        setup_nonblocking_rx();
+        HAL_StatusTypeDef dma_start_status =
+                HAL_UART_Receive_DMA(&huart4, (uint8_t*)RX_BUF->_buf, CORE_RX_BUF_SIZE);
+        if (dma_start_status != HAL_OK)
                 return fail_startup(tx_frame);
 
         HAL_StatusTypeDef scan_start_status = HAL_UART_Transmit(
