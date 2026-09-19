@@ -300,8 +300,8 @@ static void MX_GPIO_Init(void)
 
         /*Configure GPIO pin Output Level */
         HAL_GPIO_WritePin(
-                RX_FRAMING_MISSING_GPIO_Port,
-                RX_FRAMING_MISSING_Pin,
+                GPIOB,
+                RX_FRAMING_MISSING_Pin | INITIAL_HANDSHAKE_FAILED_Pin,
                 GPIO_PIN_RESET);
 
         /*Configure GPIO pin Output Level */
@@ -320,12 +320,12 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-        /*Configure GPIO pin : RX_FRAMING_MISSING_Pin */
-        GPIO_InitStruct.Pin   = RX_FRAMING_MISSING_Pin;
+        /*Configure GPIO pins : RX_FRAMING_MISSING_Pin INITIAL_HANDSHAKE_FAILED_Pin */
+        GPIO_InitStruct.Pin   = RX_FRAMING_MISSING_Pin | INITIAL_HANDSHAKE_FAILED_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-        HAL_GPIO_Init(RX_FRAMING_MISSING_GPIO_Port, &GPIO_InitStruct);
+        HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
         /*Configure GPIO pins : AIN1_Pin AIN2_Pin M_MODE_Pin */
         GPIO_InitStruct.Pin   = AIN1_Pin | AIN2_Pin | M_MODE_Pin;
