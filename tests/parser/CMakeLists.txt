@@ -27,6 +27,17 @@ function(add_parser_test parser_name)
         -Werror
     )
 
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${test_target} PRIVATE
+            -fsanitize=undefined
+            -fno-sanitize-recover=undefined
+        )
+        target_link_options(${test_target} PRIVATE
+            -fsanitize=undefined
+            -fno-sanitize-recover=undefined
+        )
+    endif()
+
     add_test(NAME ${test_target} COMMAND ${test_target})
 endfunction()
 

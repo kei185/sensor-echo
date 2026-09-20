@@ -38,7 +38,7 @@ static uint32_t  lidar_receive_count;
 static uint32_t  host_receive_count;
 static bool      malformed_health_reply;
 static TxBufSlot startup_slot;
-static int8_t    rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
+static uint8_t   rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
 static uint32_t  rx_remain_bytes;
 static RxBuf     rx_buf = {
         .remain_bytes = &rx_remain_bytes,
@@ -176,13 +176,13 @@ void setup_blocking_rx(size_t length)
         rx_buf.lap      = 0u;
 }
 
-size_t translate(int8_t* to)
+size_t translate(uint8_t* to)
 {
         assert(to != NULL);
-        uint8_t reply_type = (uint8_t)RX_BUF->_buf[6];
+        uint8_t reply_type = RX_BUF->_buf[6];
         assert(reply_type == SYS_TYPE_CODE_DEVICE_INFO ||
                reply_type == SYS_TYPE_CODE_HEALTH);
-        to[0] = (int8_t)reply_type;
+        to[0] = reply_type;
         return 1u;
 }
 
@@ -196,7 +196,7 @@ HAL_StatusTypeDef
 HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length)
 {
         assert(huart == &huart4);
-        assert(data == (uint8_t*)RX_BUF->_buf);
+        assert(data == RX_BUF->_buf);
         assert(length == CORE_RX_BUF_SIZE);
         record_event(EVENT_DMA_STARTED);
         return HAL_OK;

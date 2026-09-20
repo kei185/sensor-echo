@@ -6,7 +6,7 @@
 
 extern const uint16_t MSG_SIZE;
 
-extern const uint8_t* MSG[];
+extern const uint8_t* const MSG[];
 typedef enum
 {
         MSG_TYPE_SCAN = 0,

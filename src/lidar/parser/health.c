@@ -22,7 +22,7 @@ bool read_health_frame(ParserHealth* health)
         if (health == NULL)
                 return false;
 
-        health->health = (uint8_t)read_byte();
+        health->health = read_byte();
 
         health_parse(health);
         return true;

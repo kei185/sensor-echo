@@ -22,7 +22,7 @@
  */
 #define BLOCKING_READ_GUARD_SIZE 2u
 
-static int8_t rx_storage[CORE_RX_BUF_SIZE];
+static uint8_t rx_storage[CORE_RX_BUF_SIZE];
 
 static RxBuf _RX_BUF = {
         .lap          = 0,
@@ -98,12 +98,12 @@ bool is_safe_read()
  *
  * @return a buffer item of a byte
  */
-int8_t read_byte()
+uint8_t read_byte(void)
 {
         while (!is_safe_read())
                 ;
 
-        int8_t byte = _RX_BUF._buf[_RX_BUF.read_idx];
+        uint8_t byte = _RX_BUF._buf[_RX_BUF.read_idx];
 
         increment();
 
@@ -122,8 +122,7 @@ uint32_t dec_little_endian(const uint8_t len)
         uint32_t ret = 0;
 
         for (uint8_t i = 0; i < len; ++i)
-                // Preserve the wire byte before widening the signed read_byte result.
-                ret |= (uint32_t)(uint8_t)read_byte() << (i * 8);
+                ret |= (uint32_t)read_byte() << (i * 8);
 
         return ret;
 }

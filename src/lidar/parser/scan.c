@@ -24,7 +24,7 @@ static bool is_start_frame(void)
 /**
  *
  */
-static uint8_t read_qty(void) { return (uint8_t)read_byte(); }
+static uint8_t read_qty(void) { return read_byte(); }
 
 /**
  * @return angle in Q6 degrees, or PARSER_SCAN_ANGLE_INVALID_Q6 if the field is invalid
@@ -46,8 +46,8 @@ static uint32_t distance(void)
 {
         // Si[0] is intensity; the low two bits of Si[1] are flags.
         (void)read_byte();
-        uint8_t low  = (uint8_t)read_byte();
-        uint8_t high = (uint8_t)read_byte();
+        uint8_t low  = read_byte();
+        uint8_t high = read_byte();
         return ((uint32_t)high << 6) | (low >> 2);
 }
 
@@ -79,8 +79,7 @@ static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
                 return 0;
 
         for (uint32_t i = 0; i < meta->data_num; ++i) {
-                p[i]         = (ParserScannedPoint){.angle = angle(meta, i),
-                                                    .dist  = distance()};
+                p[i] = (ParserScannedPoint){.angle = angle(meta, i), .dist = distance()};
         }
 
         return meta->data_num;
@@ -99,9 +98,7 @@ uint32_t read_scan_frame(ParserScannedPoint* points)
         // read ct
         (void)is_start_frame();
 
-        ParserScanMeta scanMeta = {.start_angle     = 0,
-                                   .end_angle       = 0,
-                                   .data_num        = 0};
+        ParserScanMeta scanMeta = {.start_angle = 0, .end_angle = 0, .data_num = 0};
 
         // read data num
         scanMeta.data_num = read_qty();
