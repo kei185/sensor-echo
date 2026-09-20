@@ -47,13 +47,12 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
 
 static void find_start_sign(void)
 {
-        uint8_t previous = (uint8_t)read_byte();
+        uint8_t previous = read_byte();
 
         while (true) {
-                uint8_t current = (uint8_t)read_byte();
-                uint16_t header = (uint16_t)previous | ((uint16_t)current << 8);
+                uint8_t current = read_byte();
 
-                if (header == SYS_PACKET_HEADER_LE)
+                if (previous == SYS_PACKET_HEADER_MSB && current == SYS_PACKET_HEADER_LSB)
                         return;
 
                 previous = current;
@@ -85,7 +84,7 @@ ParserMeta* read_meta(ParserMeta* rfm)
 
         read_res_len(rfm);
 
-        int8_t tc = (int8_t)dec_little_endian(SYS_PACKET_TYPE_CODE_SIZE);
+        uint8_t tc = (uint8_t)dec_little_endian(SYS_PACKET_TYPE_CODE_SIZE);
         set_type_code(rfm, tc);
 
         return rfm;
