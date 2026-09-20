@@ -4,6 +4,5 @@
 #include "stm32f4xx_hal_uart.h"
 
 extern UART_HandleTypeDef huart2;
-extern UART_HandleTypeDef huart4;
 
 #endif /* ARBITER_TEST_MAIN_H */

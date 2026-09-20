@@ -2,9 +2,8 @@
 
 const uint8_t START_OF_FRAME[SOF_SIZE] = {0xAA, 0x55};
 
-const char      MSG_DEVICE_READY[ACK_SIZE] = "DEVICE READY";
-const Operation OP[COMMAND_NUM]            = {
-        {.command = {0xAA, 0xA1}, .ack = "GET STAT ACK"},
-        {.command = {0xAA, 0xA2}, .ack = "SRT SCAN ACK"},
-        {.command = {0xAA, 0xA3}, .ack = "END SCAN ACK"},
+const uint8_t HOST_COMMANDS[HOST_COMMAND_COUNT][HOST_COMMAND_SIZE] = {
+        [HOST_COMMAND_GET_STATUS] = {0xAA, 0xA1},
+        [HOST_COMMAND_START_SCAN] = {0xAA, 0xA2},
+        [HOST_COMMAND_END_SCAN]   = {0xAA, 0xA3},
 };

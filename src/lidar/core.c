@@ -7,14 +7,32 @@
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
+/*
+ * is_safe_read() requires:
+ *
+ *     write_idx - (read_idx + 1) > 1
+ *
+ * which is equivalent to:
+ *
+ *     read_idx < write_idx - 2
+ *
+ * A blocking reply has no moving DMA write head, so expose a virtual write
+ * position two bytes past the received data. This makes the last real byte
+ * readable while the virtual guard bytes remain unreadable.
+ */
+#define BLOCKING_READ_GUARD_SIZE 2u
+
 static int8_t rx_storage[CORE_RX_BUF_SIZE];
-static RxBuf  _RX_BUF = {
-        .lap          = false,
+
+static RxBuf _RX_BUF = {
+        .lap          = 0,
         .remain_bytes = &DMA1_Stream2->NDTR,
         ._buf         = rx_storage,
         .read_idx     = 0,
 };
 const RxBuf* const RX_BUF = &_RX_BUF;
+
+static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
 
 static inline uint32_t next_idx(void)
 {
@@ -104,6 +122,22 @@ uint32_t dec_little_endian(const uint8_t len)
                 ret |= (uint32_t)(uint8_t)read_byte() << (i * 8);
 
         return ret;
+}
+
+void setup_blocking_rx(size_t length)
+{
+        _RX_BUF.read_idx = 0u;
+        _RX_BUF.lap      = 0u;
+        blocking_remain_bytes =
+                CORE_RX_BUF_SIZE - (uint32_t)length - BLOCKING_READ_GUARD_SIZE;
+        _RX_BUF.remain_bytes = &blocking_remain_bytes;
+}
+
+void setup_nonblocking_rx(void)
+{
+        _RX_BUF.read_idx     = 0u;
+        _RX_BUF.lap          = 0u;
+        _RX_BUF.remain_bytes = &DMA1_Stream2->NDTR;
 }
 
 static TxBuf _TX_BUF = {

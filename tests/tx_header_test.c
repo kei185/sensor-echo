@@ -95,10 +95,17 @@ static void test_multibyte_length(void)
 static void test_empty_payload(void)
 {
         uint8_t frame[TX_FRAME_HEADER_SIZE] = {0};
-        size_t size = tx_frame_write_header(frame, sizeof(frame), 0u, FRAME_TYPE_SYS, 0u);
+        size_t  size                        = tx_frame_write_header(
+                frame,
+                sizeof(frame),
+                0u,
+                FRAME_TYPE_INITIALIZING,
+                0u);
 
         // No payload bytes are sent, but the complete ten-byte header is sent.
         assert(size == sizeof(frame));
+        // 初期化開始メッセージはsystem messageの先頭typeである0x04を使う。
+        assert(frame[5] == 0x04u);
         // CRC over 0x00 0x00 with an initial CRC of zero is zero.
         assert(frame[4] == 0x00u);
 }

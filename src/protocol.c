@@ -8,6 +8,7 @@
 
 #include "arbiter.h"
 #include "protocol.h"
+#include "startup.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 #include "lidar/sys.h"
@@ -18,18 +19,15 @@
 #include "lidar/parser/scan.h"
 
 static const char DEVICE_INFO_MESSAGE_FORMAT[] =
-        "[SENSOR-ECHO] LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u "
-        "serial=%s\r\n";
-static const char HEALTH_MESSAGE_FORMAT[] =
-        "[SENSOR-ECHO] LiDAR STATUS: %s | code=0x%02X\r\n";
+        "LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u serial=%s\r\n";
+static const char HEALTH_MESSAGE_FORMAT[] = "LiDAR STATUS: %s | code=0x%02X\r\n";
 
 // bool imu_arrived = false;
 // bool enc_arrived = false;
 void loop()
 {
-        HAL_UART_Transmit(&huart2, (uint8_t*)"DEVICE INITIALIZING...\r\n", 22, 100);
-
-        init_arbiter();
+        if (!run_startup_sequence())
+                Error_Handler();
 
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.
@@ -166,8 +164,20 @@ size_t translate(int8_t* to)
         if (payload_length == 0u || payload_length > UINT16_MAX)
                 return 0u;
 
-        FrameType frame_type =
-                meta.type_code == SYS_TYPE_CODE_SCAN ? FRAME_TYPE_LIDAR : FRAME_TYPE_SYS;
+        FrameType frame_type;
+        switch (meta.type_code) {
+                case SYS_TYPE_CODE_DEVICE_INFO:
+                        frame_type = FRAME_TYPE_DEVICE_INFO;
+                        break;
+                case SYS_TYPE_CODE_HEALTH:
+                        frame_type = FRAME_TYPE_HEALTH_STATUS;
+                        break;
+                case SYS_TYPE_CODE_SCAN:
+                        frame_type = FRAME_TYPE_LIDAR;
+                        break;
+                default:
+                        return 0u;
+        }
 
         return tx_frame_write_header(
                 (uint8_t*)to,

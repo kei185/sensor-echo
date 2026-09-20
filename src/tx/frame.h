@@ -10,31 +10,26 @@ extern const uint8_t START_OF_FRAME[SOF_SIZE];
 
 typedef enum
 {
-        FRAME_TYPE_SYS = 0,
-        FRAME_TYPE_LIDAR,
-        FRAME_TYPE_IMU,
-        FRAME_TYPE_ENC,
+        FRAME_TYPE_LIDAR          = 0x01,
+        FRAME_TYPE_IMU            = 0x02,
+        FRAME_TYPE_ENC            = 0x03,
+        FRAME_TYPE_INITIALIZING   = 0x04,
+        FRAME_TYPE_DEVICE_INFO    = 0x05,
+        FRAME_TYPE_HEALTH_STATUS  = 0x06,
+        FRAME_TYPE_READY          = 0x07,
+        FRAME_TYPE_STARTUP_FAILED = 0x08,
 } FrameType;
 
-#define COMMAND_NUM 4u
 typedef enum
 {
-        COMMAND_DEVICE_READY,
-        COMMAND_GET_STAT,
-        COMMAND_SRT_SCAN,
-        COMMAND_END_SCAN,
-        UNDEFINED,
-} COMMAND;
+        HOST_COMMAND_GET_STATUS,
+        HOST_COMMAND_START_SCAN,
+        HOST_COMMAND_END_SCAN,
+        HOST_COMMAND_COUNT,
+} HostCommand;
 
-#define COMMAND_SIZE 2u
-#define ACK_SIZE     13u
-typedef struct
-{
-        uint8_t command[COMMAND_SIZE];
-        char    ack[ACK_SIZE];
-} Operation;
+#define HOST_COMMAND_SIZE 2u
 
-extern const char      MSG_DEVICE_READY[ACK_SIZE];
-extern const Operation OP[COMMAND_NUM];
+extern const uint8_t HOST_COMMANDS[HOST_COMMAND_COUNT][HOST_COMMAND_SIZE];
 
 #endif

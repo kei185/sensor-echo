@@ -2,35 +2,18 @@
 
 This page describes the planned startup and scan data path. Startup uses
 blocking I/O. During scanning, RX DMA receives LiDAR bytes and TX DMA sends
-PC frames. The buffer and throughput estimates below cover LiDAR data only.
+host frames. The buffer and throughput estimates below cover LiDAR data only.
 
 ## Startup sequence
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant PC
-    participant Controller
-    participant LiDAR
-
-    Note over PC,LiDAR: Startup uses blocking I/O
-    Controller->>LiDAR: Request status
-    LiDAR-->>Controller: Status response
-    Controller-->>PC: Forward status
-    Controller->>LiDAR: Request device information
-    LiDAR-->>Controller: Device information response
-    Controller-->>PC: Forward device information
-    Controller-->>PC: Device ready notification
-    PC->>Controller: Start scan command
-    Controller->>Controller: Prepare RX DMA and three TX slots
-    Controller->>LiDAR: Start scan
-```
+The startup order, commands, and host system messages are defined in
+[frame.md](frame.md#startup-sequence).
 
 ## Scan-time DMA arbitration
 
 RX and TX events can arrive in either order. When RX data becomes ready,
 the arbiter checks the three TX buffers before reading it. If a TX buffer
-is free, the controller reads the RX data and builds a PC frame. If all
+is free, the controller reads the RX data and builds a host frame. If all
 three TX buffers are busy, it skips that RX read. A LiDAR packet may cross
 an RX buffer boundary.
 
@@ -47,7 +30,7 @@ flowchart LR
     rx_b -->|Ready| arbiter
     arbiter --> free{Any TX buffer free?}
     free -->|No| skip[Skip this RX read]
-    free -->|Yes| build[Read RX data and build a PC frame]
+    free -->|Yes| build[Read RX data and build a host frame]
     subgraph tx_buffers["Three TX buffers (each tracks its state)"]
         tx_a[TX A]
         tx_b[TX B]
@@ -59,11 +42,11 @@ flowchart LR
     tx_a --> tx_transfer[TX transfer]
     tx_b --> tx_transfer
     tx_c --> tx_transfer
-    tx_transfer --> pc[PC]
+    tx_transfer --> host[Host]
     tx_transfer -. Finished .-> arbiter
 ```
 
-Only one free TX buffer is selected for each PC frame. Each TX buffer moves
+Only one free TX buffer is selected for each host frame. Each TX buffer moves
 through `free -> filling -> queued -> transmitting -> free`. USART2 owns a
 transmitting buffer until the UART TX completion callback; the controller
 must not write to it. TX DMA sends the actual frame length, not the entire
@@ -87,8 +70,8 @@ defines the sample count (`LSN`) as one byte. A normal LiDAR scan packet has
 10 fixed bytes plus 3 bytes per point, so its largest possible size is
 `10 + 3 * 255 = 775` bytes. This is one packet, not one full rotation.
 
-The PC LiDAR payload uses 4 bytes per point: a 16-bit distance and a 16-bit
-Q6 angle. The 10-byte PC header makes the largest PC frame
+The host LiDAR payload uses 4 bytes per point: a 16-bit distance and a 16-bit
+Q6 angle. The 10-byte host header makes the largest host frame
 `10 + 4 * 255 = 1030` bytes. Write the payload at the frame base plus
 10 bytes, then write the header at the frame base.
 
@@ -106,7 +89,7 @@ TX storage: 4032 bytes
 Largest frame in one slot: [header 10 B][255 points x 4 B][unused 314 B]
 ```
 
-One complete PC frame occupies one slot, so neither the CPU writer nor TX
+One complete host frame occupies one slot, so neither the CPU writer nor TX
 DMA needs to split that frame at a slot boundary. The slot index wraps when
 it reaches 3. A slot becomes available again only after its UART TX
 completion callback. The three slots absorb short bursts, but their number
@@ -119,7 +102,7 @@ rate, one rotation contains about 400 points. The point payload is therefore
 about `400 * 4 = 1600` bytes per 100 ms. At 230400 bps with 8N1 framing,
 USART2 can send at most `230400 bits/s / 10 bits/byte * 0.1 s = 2304 bytes`
 per 100 ms.
-This leaves 704 bytes per 100 ms for the 10-byte PC header on each LiDAR
+This leaves 704 bytes per 100 ms for the 10-byte host header on each LiDAR
 packet. For `P` LiDAR packets per rotation:
 
 ```text
@@ -139,4 +122,4 @@ for byte-oriented UART data, so its transfer width needs to be changed
 before DMA-based scanning is used. RX DMA is currently in normal mode; it
 must be restarted or configured for continuous reception.
 
-For PC commands and frame formats, see [frame.md](frame.md).
+For host commands and frame formats, see [frame.md](frame.md).
