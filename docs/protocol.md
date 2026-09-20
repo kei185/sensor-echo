@@ -1,83 +1,124 @@
 # Startup and Scan Data Flow
 
-This page describes the planned startup and scan data path. Startup uses
-blocking I/O. During scanning, RX DMA receives LiDAR bytes and TX DMA sends
-host frames. The buffer and throughput estimates below cover LiDAR data only.
+Startup uses blocking UART transfers. Scanning uses circular RX DMA and
+software-started TX DMA.
 
-## Startup sequence
+## Startup
 
-The startup order, commands, and host system messages are defined in
+The startup order and host messages are defined in
 [frame.md](frame.md#startup-sequence).
 
-## Scan-time DMA arbitration
-
-RX and TX events can arrive in either order. When RX data becomes ready,
-the arbiter checks the five TX buffers before reading it. If a TX buffer
-is free, the controller reads the RX data and builds a host frame. If all
-five TX buffers are busy, it skips that RX read. A LiDAR packet may cross
-an RX buffer boundary.
+## Scan path
 
 ```mermaid
 flowchart LR
-    lidar[LiDAR] --> rx_dma[RX DMA]
-    subgraph rx_buffers[Two RX buffers]
-        rx_a[RX A]
-        rx_b[RX B]
-    end
-    rx_dma --> rx_a
-    rx_dma --> rx_b
-    rx_a -->|Ready| arbiter[Arbiter]
-    rx_b -->|Ready| arbiter
-    arbiter --> free{Any TX buffer free?}
-    free -->|No| skip[Skip this RX read]
-    free -->|Yes| build[Read RX data and build a host frame]
-    subgraph tx_buffers["Three TX buffers (each tracks its state)"]
-        tx_a[TX A]
-        tx_b[TX B]
-        tx_c[TX C]
-    end
-    build -->|Choose one free buffer| tx_a
-    build -->|Choose one free buffer| tx_b
-    build -->|Choose one free buffer| tx_c
-    tx_a --> tx_transfer[TX transfer]
-    tx_b --> tx_transfer
-    tx_c --> tx_transfer
-    tx_transfer --> host[Host]
-    tx_transfer -. Finished .-> arbiter
+    lidar["LiDAR byte stream"] --> rx_dma["RX DMA"]
+    rx_dma --> rx_ring["4096-byte circular RX ring"]
+    rx_ring --> free{"TX slot free?"}
+    free -- No --> pause["Keep CPU read position"]
+    pause --> free
+    free -- Yes --> before{"DMA already passed reader?"}
+    before -- Yes --> drop["Discard current RX data and any unsent frame<br/>Move reader to DMA position"]
+    before -- No --> parse["Parse bytes and build one host frame"]
+    parse --> after{"DMA passed reader while parsing?"}
+    after -- Yes --> drop
+    after -- No --> tx_queue["Five TX slots"]
+    drop --> fresh["Wait for fresh bytes"]
+    fresh --> free
+    tx_queue --> tx_dma["TX DMA"]
+    tx_dma --> host["Host"]
 ```
 
-Only one free TX buffer is selected for each host frame. Each TX buffer moves
-through `free -> filling -> queued -> transmitting -> free`. USART2 owns a
-transmitting buffer until the UART TX completion callback; the controller
-must not write to it. TX DMA sends the actual frame length, not the entire
-buffer.
+RX DMA continues while all TX slots are busy. The CPU read position stays
+unchanged, so the next free-slot check can detect whether DMA passed it.
 
-If none of the five TX buffers is free, the arbiter does not read the newly
-ready RX data. It records the skipped read and lets RX continue.
-Since the skipped data may include only part of a LiDAR packet, parsing must
-resume at the next valid packet header. Starting a TX transfer is a software
-action; USART2 supplies the DMA requests that pace the individual bytes.
+One host frame uses one TX slot. A slot follows this cycle:
 
-With HAL's normal-mode TX DMA, the DMA completion handler enables the USART2
-transmit-complete (TC) interrupt. The USART2 interrupt handler must call
-`HAL_UART_IRQHandler(&huart2)`. Release the slot in
-`HAL_UART_TxCpltCallback`, after the final byte has left the UART.
+```mermaid
+stateDiagram-v2
+    [*] --> Free
+    Free --> Filling
+    Filling --> Queued
+    Queued --> Transmitting
+    Transmitting --> Free: UART transmission complete
+```
 
-## LiDAR TX buffer layout
+The queue stores each slot as free or full. The UART state distinguishes a
+queued full slot from the full slot currently being transmitted.
 
-The [LiDAR development manual](../YDLIDAR_T-MINI_PLUS_Development_Manual_with_TOC.pdf)
-defines the sample count (`LSN`) as one byte. A normal LiDAR scan packet has
-10 fixed bytes plus 3 bytes per point, so its largest possible size is
-`10 + 3 * 255 = 775` bytes. This is one packet, not one full rotation.
+## RX ring positions
 
-The host LiDAR payload uses 4 bytes per point: a 16-bit distance and a 16-bit
-Q6 angle. The 10-byte host header makes the largest host frame
-`10 + 4 * 255 = 1030` bytes. Write the payload at the frame base plus
-10 bytes, then write the header at the frame base.
+`write_idx` is the next DMA destination. `read_idx` is the next byte for the
+CPU. The CPU never reads the current DMA destination.
 
-The TX storage is one 6720-byte array divided into five 1344-byte slots. A
-pointer to slot `i` is the array base plus `i * 1344`. The next slot after
-slot 4 is slot 0.
+```text
+index       0                                             4095
+            |-----------------------------------------------|
+DMA         W -> next write
+CPU                         R -> next read
+```
+
+`lap` is the number of DMA wraps that the reader has not crossed yet. DMA
+increments it at the ring end. The reader decrements it when its index returns
+to zero.
+
+| `lap` | Index relation | Result |
+| ---: | --- | --- |
+| 0 | Any valid indexes | DMA has not passed the reader |
+| 1 | `write_idx <= read_idx` | DMA has not passed the reader |
+| 1 | `write_idx > read_idx` | DMA passed the reader |
+| 2 or more | Any valid indexes | DMA passed the reader |
+
+```mermaid
+flowchart TD
+    start["Read lap and indexes"] --> many{"lap > 1?"}
+    many -- Yes --> passed["Overrun"]
+    many -- No --> one{"lap == 1?"}
+    one -- No --> safe["No overrun"]
+    one -- Yes --> ahead{"write_idx > read_idx?"}
+    ahead -- Yes --> passed
+    ahead -- No --> safe
+```
+
+The indexes are signed values. This keeps `100 - 3500 = -3400` negative
+after one DMA wrap instead of wrapping to a large unsigned value.
+
+## Overrun recovery
+
+```mermaid
+flowchart LR
+    detect["Detect overrun"] --> discard["Discard unread and partial data"]
+    discard --> align["Set read position to current DMA position"]
+    align --> wait["Wait for new bytes"]
+    wait --> sync["Find the next valid packet"]
+    sync --> resume["Resume frame conversion"]
+```
+
+Recovery starts from bytes that arrive after alignment. It does not wait for
+another full ring wrap.
+
+## Data checks
+
+```mermaid
+flowchart LR
+    progress["lap and indexes"] --> overwrite["Detect ring overwrite"]
+    marker["Packet header"] --> boundary["Find packet boundary"]
+    cs["LiDAR packet CS"] --> packet["Check packet bytes"]
+    lastcrc["LiDAR LastCRC"] --> rotation["Check a completed rotation"]
+    hostcrc["Host frame CRC"] --> hostfield["Check host length field"]
+```
+
+The ring position detects overwritten bytes. A checksum cannot replace that
+check. LiDAR packet `CS` and `LastCRC` are future checks. The current host
+CRC covers only the two payload-length bytes.
+
+## Frame and TX storage sizes
+
+| Item | Largest size |
+| --- | ---: |
+| One LiDAR packet with one-byte LSN | `10 + 3 * 255 = 775` bytes |
+| One host LiDAR frame | `10 + 4 * 255 = 1030` bytes |
+| One TX slot | 1344 bytes |
 
 ```text
 TX storage: 6720 bytes
@@ -86,42 +127,30 @@ TX storage: 6720 bytes
 +-----------------+-----------------+-----------------+-----------------+-----------------+
 0                1344              2688              4032              5376              6720
 
-Largest frame in one slot: [header 10 B][255 points x 4 B][unused 314 B]
+Largest frame: [header 10 B][255 points x 4 B][unused 314 B]
 ```
 
-One complete host frame occupies one slot, so neither the CPU writer nor TX
-DMA needs to split that frame at a slot boundary. The slot index wraps when
-it reaches 5. A slot becomes available again only after its UART TX
-completion callback. One slot can be in DMA transmission while four complete
-frames wait. The five payload arrays use 6720 bytes; the queue object uses
-6764 bytes on the target after slot metadata and alignment. Extra slots do
-not increase the UART's sustained transfer rate.
+One slot can be transmitting while four complete frames wait. The payload
+arrays use 6720 bytes. The full queue object uses 6764 bytes after metadata
+and alignment.
 
-## LiDAR-only throughput estimate
+More slots absorb a short burst. They do not increase the sustained UART
+rate. With 8N1 framing, the maximum payload rate is approximately
+`baud rate / 10` bytes per second.
 
-At the nominal ranging rate of 4000 points per second and a 10 Hz rotation
-rate, one rotation contains about 400 points. The point payload is therefore
-about `400 * 4 = 1600` bytes per 100 ms. At 230400 bps with 8N1 framing,
-USART2 can send at most `230400 bits/s / 10 bits/byte * 0.1 s = 2304 bytes`
-per 100 ms.
-This leaves 704 bytes per 100 ms for the 10-byte host header on each LiDAR
-packet. For `P` LiDAR packets per rotation:
+## LiDAR-only throughput at 230400 bps
 
-```text
-1600 + 10 * P <= 2304 bytes per 100 ms
-```
+| Quantity | Calculation | Result |
+| --- | ---: | ---: |
+| LiDAR point rate | configured ranging rate | 4000 points/s |
+| Host point payload | `4000 * 4` | 16000 bytes/s |
+| UART capacity with 8N1 | `230400 / 10` | 23040 bytes/s |
+| Remaining capacity | `23040 - 16000` | 7040 bytes/s |
 
-The theoretical limit is 70 LiDAR packets per rotation, with almost no
-margin at that limit. Measure the actual packet count and queue occupancy
-before treating 230400 bps as sufficient. Short bursts can fill the slots
-even when the average data rate fits.
+At a 6 Hz scan rate, one rotation carries about 667 points. Its host
+point payload is about 2667 bytes, while the UART can send 3840 bytes in the
+same interval. This leaves about 1173 bytes for 10-byte host headers, or a
+theoretical maximum of 117 LiDAR packets per rotation. Actual packet count and
+TX queue occupancy must be measured before using this limit.
 
-This is a design target. The current firmware still declares two 1024-byte
-TX buffers and configures USART2 at 115200 bps; the new buffer layout and
-baud rate have not been implemented yet. USART2 TX completion interrupts
-must also be enabled. The current DMA configuration uses word-width transfers
-for byte-oriented UART data, so its transfer width needs to be changed
-before DMA-based scanning is used. RX DMA is currently in normal mode; it
-must be restarted or configured for continuous reception.
-
-For host commands and frame formats, see [frame.md](frame.md).
+For host commands and frame fields, see [frame.md](frame.md).
