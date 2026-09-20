@@ -34,11 +34,11 @@ const RxBuf* const RX_BUF = &_RX_BUF;
 
 static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
 
-static inline uint32_t next_idx(void)
+static inline int32_t next_idx(void)
 {
-        uint32_t n = _RX_BUF.read_idx + 1;
+        int32_t n = _RX_BUF.read_idx + 1;
 
-        if (_RX_BUF.read_idx + 1 >= CORE_RX_BUF_SIZE)
+        if (n >= (int32_t)CORE_RX_BUF_SIZE)
                 return 0;
 
         return n;
@@ -46,13 +46,17 @@ static inline uint32_t next_idx(void)
 
 static inline void increment(void)
 {
-        if (++_RX_BUF.read_idx >= CORE_RX_BUF_SIZE)
+        if (++_RX_BUF.read_idx >= (int32_t)CORE_RX_BUF_SIZE)
                 _RX_BUF.read_idx = 0;
 }
 
-static inline uint32_t write_idx(void)
+static inline int32_t write_idx(void)
 {
-        return CORE_RX_BUF_SIZE - *_RX_BUF.remain_bytes;
+        const int32_t write = (int32_t)CORE_RX_BUF_SIZE - (int32_t)*_RX_BUF.remain_bytes;
+
+        // NDTR reaches zero at the ring end, so this calculation briefly
+        // produces 4096. DMA writes the next byte at index 0, so return 0.
+        return write == (int32_t)CORE_RX_BUF_SIZE ? 0 : write;
 }
 
 bool is_lapped()

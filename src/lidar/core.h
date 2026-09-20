@@ -14,7 +14,7 @@ typedef struct RxBuf
         volatile uint32_t* remain_bytes; // updated by DMA
         volatile uint8_t   lap;          // update by DMA RX IRQ
         int8_t*            _buf;
-        uint32_t           read_idx;
+        int32_t            read_idx;
 } RxBuf;
 
 extern const RxBuf* const RX_BUF;
