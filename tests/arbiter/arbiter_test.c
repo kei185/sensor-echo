@@ -36,7 +36,7 @@ static void queue_frame(uint8_t index, uint32_t length, uint8_t marker)
 {
         fake_slots[index].full    = true;
         fake_slots[index].length  = length;
-        fake_slots[index]._buf[0] = (int8_t)marker;
+        fake_slots[index]._buf[0] = marker;
 }
 
 TxBufSlot* get_full_buf(void)
@@ -83,7 +83,7 @@ static void try_dispatch_tx_starts_the_oldest_queued_frame(void)
 
         // 検証
         assert(dma_start_calls == 1u);
-        assert(dma_start_data == (const uint8_t*)fake_slots[0]._buf);
+        assert(dma_start_data == fake_slots[0]._buf);
         assert(dma_start_length == 24u);
         assert(fake_slots[0].full);
 }
@@ -120,7 +120,7 @@ static void transmit_completion_releases_the_slot_and_starts_the_next_frame(void
         assert(release_calls == 1u);
         assert(!fake_slots[0].full);
         assert(dma_start_calls == 2u);
-        assert(dma_start_data == (const uint8_t*)fake_slots[1]._buf);
+        assert(dma_start_data == fake_slots[1]._buf);
         assert(dma_start_length == 13u);
 }
 

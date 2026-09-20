@@ -131,7 +131,7 @@ static bool request_and_forward_lidar_message(
 
         setup_blocking_rx(reply_length);
 
-        uint8_t* rx_buf = (uint8_t*)RX_BUF->_buf;
+        uint8_t* rx_buf = RX_BUF->_buf;
 
         // receive lidar response
         HAL_StatusTypeDef receive_status = HAL_UART_Receive(
@@ -150,7 +150,7 @@ static bool request_and_forward_lidar_message(
         if (!is_expected_reply)
                 return false;
 
-        size_t frame_length = translate((int8_t*)tx_frame);
+        size_t frame_length = translate(tx_frame);
 
         if (frame_length == 0u)
                 return false;
@@ -231,7 +231,7 @@ bool run_startup_sequence(void)
         TxBufSlot* tx_slot = get_empty_buf();
         if (tx_slot == NULL)
                 return fail_startup(NULL);
-        uint8_t* tx_frame = (uint8_t*)tx_slot->_buf;
+        uint8_t* tx_frame = tx_slot->_buf;
 
         bool initializing_sent = send_host_system_message(
                 tx_frame,
@@ -269,7 +269,7 @@ bool run_startup_sequence(void)
         setup_nonblocking_rx();
 
         HAL_StatusTypeDef dma_start_status =
-                HAL_UART_Receive_DMA(&huart4, (uint8_t*)RX_BUF->_buf, CORE_RX_BUF_SIZE);
+                HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE);
 
         if (dma_start_status != HAL_OK)
                 return fail_startup(tx_frame);

@@ -62,7 +62,7 @@ void loop()
         }
 }
 
-static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
+static size_t translate_device_info(char* to, const ParserDeviceInfo* info)
 {
         if (to == NULL || info == NULL)
                 return 0u;
@@ -83,7 +83,7 @@ static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
         const size_t capacity = CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE;
 
         int written = snprintf(
-                (char*)to,
+                to,
                 capacity,
                 DEVICE_INFO_MESSAGE_FORMAT,
                 (unsigned)info->model,
@@ -95,7 +95,7 @@ static size_t translate_device_info(int8_t* to, ParserDeviceInfo* info)
         return written < 0 || (size_t)written >= capacity ? 0u : (size_t)written;
 }
 
-static size_t translate_health(int8_t* to, ParserHealth* health)
+static size_t translate_health(char* to, const ParserHealth* health)
 {
         if (to == NULL || health == NULL)
                 return 0u;
@@ -103,7 +103,7 @@ static size_t translate_health(int8_t* to, ParserHealth* health)
         const size_t capacity = CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE;
 
         int written = snprintf(
-                (char*)to,
+                to,
                 capacity,
                 HEALTH_MESSAGE_FORMAT,
                 health->health > 0u ? "FAULT" : "OK",
@@ -115,7 +115,7 @@ static size_t translate_health(int8_t* to, ParserHealth* health)
 /*
  * @param to points to the head of the payload field
  */
-static size_t translate_frame_content(int8_t* to, SysTypeCode type)
+static size_t translate_frame_content(uint8_t* to, SysTypeCode type)
 {
 
         ParserDeviceInfo info;
@@ -126,13 +126,13 @@ static size_t translate_frame_content(int8_t* to, SysTypeCode type)
                         info = (ParserDeviceInfo){0};
                         if (!read_device_info_frame(&info))
                                 return 0u;
-                        return translate_device_info(to, &info);
+                        return translate_device_info((char*)to, &info);
 
                 case SYS_TYPE_CODE_HEALTH:
                         health = (ParserHealth){0};
                         if (!read_health_frame(&health))
                                 return 0u;
-                        return translate_health(to, &health);
+                        return translate_health((char*)to, &health);
 
                 case SYS_TYPE_CODE_SCAN:
                         return (size_t)read_scan_frame((ParserScannedPoint*)to) *
@@ -147,7 +147,7 @@ static size_t translate_frame_content(int8_t* to, SysTypeCode type)
  * @param to points to the beginning of a TX frame
  * @return complete TX frame size, or zero if translation fails
  */
-size_t translate(int8_t* to)
+size_t translate(uint8_t* to)
 {
         if (to == NULL)
                 return 0u;
@@ -156,7 +156,7 @@ size_t translate(int8_t* to)
         if (read_meta(&meta) == NULL)
                 return 0u;
 
-        int8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
+        uint8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
         size_t payload_length =
                 translate_frame_content(writer_payload_head, meta.type_code);
@@ -180,7 +180,7 @@ size_t translate(int8_t* to)
         }
 
         return tx_frame_write_header(
-                (uint8_t*)to,
+                to,
                 CORE_TX_BUF_SIZE,
                 (uint16_t)payload_length,
                 frame_type,

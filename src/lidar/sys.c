@@ -16,7 +16,7 @@ static const uint8_t DEC_FREQ_1HZ[]   = {0xA5, 0x0C};
 static const uint8_t RX_FREQ[]        = {0xA5, 0x0D};
 static const uint8_t SOFT_RESTART[]   = {0xA5, 0x40};
 
-const uint8_t* MSG[] = {
+const uint8_t* const MSG[] = {
         [MSG_TYPE_SCAN]           = SCAN,
         [MSG_TYPE_STOP]           = STOP,
         [MSG_TYPE_RX_SYS_INFO]    = RX_SYS_INFO,

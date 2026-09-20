@@ -8,6 +8,46 @@
 
 DMA_Stream_TypeDef mock_dma1_stream2;
 
+static void set_dma_write_index(int32_t index)
+{
+        assert(index >= 0);
+        assert(index < (int32_t)CORE_RX_BUF_SIZE);
+        mock_dma1_stream2.NDTR = CORE_RX_BUF_SIZE - (uint32_t)index;
+}
+
+static void reset_reader_at(int32_t index)
+{
+        setup_nonblocking_rx();
+        set_dma_write_index(index);
+        reset_read_idx();
+        assert(RX_BUF->read_idx == index);
+}
+
+static void overrun_detection_uses_signed_ring_index_differences(void)
+{
+        // 1周後でもDMA位置がreaderより手前なら、まだ追いついていない。
+        reset_reader_at(3500);
+        increment_lap();
+        set_dma_write_index(100);
+        assert(!is_lapped());
+
+        // 1周したDMAがreaderより先へ進むと追い越しになる。
+        reset_reader_at(100);
+        increment_lap();
+        set_dma_write_index(101);
+        assert(is_lapped());
+}
+
+static void dma_terminal_count_is_normalized_to_the_ring_start(void)
+{
+        reset_reader_at(123);
+
+        // NDTR == 0はreload直前のring終端なので、次の位置0として扱う。
+        mock_dma1_stream2.NDTR = 0u;
+        reset_read_idx();
+        assert(RX_BUF->read_idx == 0);
+}
+
 static void queue_wraps_after_five_slots_and_preserves_fifo_order(void)
 {
         TxBufSlot* slots[CORE_TX_BUF_NUM];
@@ -50,6 +90,8 @@ int main(void)
                 sizeof(TxBuf) == 6764u,
                 "Update the documented target memory estimate");
 
+        overrun_detection_uses_signed_ring_index_differences();
+        dma_terminal_count_is_normalized_to_the_ring_start();
         queue_wraps_after_five_slots_and_preserves_fifo_order();
         return 0;
 }

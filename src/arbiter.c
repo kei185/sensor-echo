@@ -29,10 +29,7 @@ void try_dispatch_tx(void)
         if (target == NULL)
                 return;
 
-        HAL_UART_Transmit_DMA(
-                &huart2,
-                (const uint8_t*)target->_buf,
-                (uint16_t)target->length);
+        HAL_UART_Transmit_DMA(&huart2, target->_buf, (uint16_t)target->length);
 }
 
 void dma_receive_complete_handler(void) { increment_lap(); }
