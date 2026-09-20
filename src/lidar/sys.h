@@ -33,8 +33,6 @@ typedef enum
 #define SYS_PACKET_HEADER_LSB     0x5A
 #define SYS_PACKET_HEADER_MSB     0xA5
 #define SYS_PACKET_HEADER         0xA55A
-#define SYS_PACKET_HEADER_LE      (SYS_PACKET_HEADER_LSB | (SYS_PACKET_HEADER_MSB << 8))
-// LE Little Endian
 
 #define SYS_PACKET_META_SIZE                                                             \
         (SYS_PACKET_HEADER_SIZE + SYS_PACKET_LEN_MODE_SIZE + SYS_PACKET_TYPE_CODE_SIZE)

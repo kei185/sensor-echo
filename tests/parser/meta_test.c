@@ -10,8 +10,8 @@ static void read_meta_skips_noise_and_reads_device_info_header(void)
                 0xffu,
                 0x5au,
                 0x00u,
-                0x5au,
                 0xa5u,
+                0x5au,
                 0x14u,
                 0x00u,
                 0x00u,
@@ -41,8 +41,8 @@ static void read_meta_decodes_continuous_scan_header(void)
 {
         // 準備
         const uint8_t input[] = {
-                0x5au,
                 0xa5u,
+                0x5au,
                 0x05u,
                 0x00u,
                 0x00u,
@@ -70,8 +70,8 @@ static void read_meta_preserves_all_30_response_length_bits(void)
 {
         // 準備
         const uint8_t input[] = {
-                0x5au,
                 0xa5u,
+                0x5au,
                 0x78u,
                 0x56u,
                 0x34u,
@@ -95,8 +95,8 @@ static void read_meta_marks_unknown_mode_and_type_as_undefined(void)
 {
         // 準備
         const uint8_t input[] = {
-                0x5au,
                 0xa5u,
+                0x5au,
                 0x00u,
                 0x00u,
                 0x00u,
@@ -120,8 +120,8 @@ static void read_meta_preserves_high_bit_wire_bytes(void)
         const uint8_t input[] = {
                 0x80u,
                 0xffu,
-                0x5au,
                 0xa5u,
+                0x5au,
                 0x80u,
                 0x00u,
                 0x00u,
