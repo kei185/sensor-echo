@@ -12,9 +12,9 @@ The startup order, commands, and host system messages are defined in
 ## Scan-time DMA arbitration
 
 RX and TX events can arrive in either order. When RX data becomes ready,
-the arbiter checks the three TX buffers before reading it. If a TX buffer
+the arbiter checks the five TX buffers before reading it. If a TX buffer
 is free, the controller reads the RX data and builds a host frame. If all
-three TX buffers are busy, it skips that RX read. A LiDAR packet may cross
+five TX buffers are busy, it skips that RX read. A LiDAR packet may cross
 an RX buffer boundary.
 
 ```mermaid
@@ -52,7 +52,7 @@ transmitting buffer until the UART TX completion callback; the controller
 must not write to it. TX DMA sends the actual frame length, not the entire
 buffer.
 
-If none of the three TX buffers is free, the arbiter does not read the newly
+If none of the five TX buffers is free, the arbiter does not read the newly
 ready RX data. It records the skipped read and lets RX continue.
 Since the skipped data may include only part of a LiDAR packet, parsing must
 resume at the next valid packet header. Starting a TX transfer is a software
@@ -75,25 +75,27 @@ Q6 angle. The 10-byte host header makes the largest host frame
 `10 + 4 * 255 = 1030` bytes. Write the payload at the frame base plus
 10 bytes, then write the header at the frame base.
 
-The planned TX storage is one 4032-byte array divided into three 1344-byte
-slots. A pointer to slot `i` is the array base plus `i * 1344`. The next
-slot after slot 2 is slot 0.
+The TX storage is one 6720-byte array divided into five 1344-byte slots. A
+pointer to slot `i` is the array base plus `i * 1344`. The next slot after
+slot 4 is slot 0.
 
 ```text
-TX storage: 4032 bytes
-+-----------------+-----------------+-----------------+
-| slot 0: 1344 B  | slot 1: 1344 B  | slot 2: 1344 B  |
-+-----------------+-----------------+-----------------+
-0                1344              2688              4032
+TX storage: 6720 bytes
++-----------------+-----------------+-----------------+-----------------+-----------------+
+| slot 0: 1344 B  | slot 1: 1344 B  | slot 2: 1344 B  | slot 3: 1344 B  | slot 4: 1344 B  |
++-----------------+-----------------+-----------------+-----------------+-----------------+
+0                1344              2688              4032              5376              6720
 
 Largest frame in one slot: [header 10 B][255 points x 4 B][unused 314 B]
 ```
 
 One complete host frame occupies one slot, so neither the CPU writer nor TX
 DMA needs to split that frame at a slot boundary. The slot index wraps when
-it reaches 3. A slot becomes available again only after its UART TX
-completion callback. The three slots absorb short bursts, but their number
-does not increase the UART's sustained transfer rate.
+it reaches 5. A slot becomes available again only after its UART TX
+completion callback. One slot can be in DMA transmission while four complete
+frames wait. The five payload arrays use 6720 bytes; the queue object uses
+6764 bytes on the target after slot metadata and alignment. Extra slots do
+not increase the UART's sustained transfer rate.
 
 ## LiDAR-only throughput estimate
 
