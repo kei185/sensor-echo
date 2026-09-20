@@ -20,18 +20,18 @@ static const char READY_MESSAGE[]        = "READY\r\n";
 static const char FAILURE_MESSAGE[]      = "STARTUP FAILED\r\n";
 
 /**
- * @brief Build and send one system-message frame to the PC.
+ * @brief Build and send one system-message frame to the host.
  *
  * The payload is written after the reserved TX header area. The header is
  * filled in last so it contains the final payload length and timestamp.
  *
- * @param tx_frame Writable TX slot used for the complete PC frame.
- * @param frame_type System-message type written into the PC frame header.
+ * @param tx_frame Writable TX slot used for the complete host frame.
+ * @param frame_type System-message type written into the host frame header.
  * @param message NUL-terminated message written into the frame payload.
- * @return true when the complete frame was sent to the PC.
+ * @return true when the complete frame was sent to the host.
  */
 static bool
-send_pc_system_message(uint8_t* tx_frame, FrameType frame_type, const char* message)
+send_host_system_message(uint8_t* tx_frame, FrameType frame_type, const char* message)
 {
         const size_t payload_length = strlen(message);
 
@@ -99,12 +99,12 @@ static bool is_expected_lidar_reply(
 }
 
 /**
- * @brief Request one LiDAR message, convert it, and forward it to the PC.
+ * @brief Request one LiDAR message, convert it, and forward it to the host.
  *
  * The response is received directly into the shared RX buffer. Blocking RX
  * setup exposes exactly that received range to the existing LiDAR parser.
  *
- * @param tx_frame Writable TX slot used for the converted PC frame.
+ * @param tx_frame Writable TX slot used for the converted host frame.
  * @param command LiDAR command sent before receiving the response.
  * @param content_length Expected LiDAR content size in bytes.
  * @param type Expected LiDAR response type.
@@ -161,7 +161,7 @@ static bool request_and_forward_lidar_message(
 }
 
 /**
- * @brief Wait until the PC sends the command that permits scanning to start.
+ * @brief Wait until the host sends the command that permits scanning to start.
  *
  * Unknown two-byte commands are ignored. A UART receive failure stops startup.
  *
@@ -169,22 +169,22 @@ static bool request_and_forward_lidar_message(
  */
 static bool wait_for_start_scan(void)
 {
-        uint8_t command[PC_COMMAND_SIZE];
+        uint8_t command[HOST_COMMAND_SIZE];
 
-        // Startup remains blocking until the PC sends the exact two-byte start command.
+        // Startup remains blocking until the host sends the exact two-byte start command.
         while (true) {
                 HAL_StatusTypeDef receive_status = HAL_UART_Receive(
                         &huart2,
                         command,
-                        PC_COMMAND_SIZE,
+                        HOST_COMMAND_SIZE,
                         HAL_MAX_DELAY);
 
                 if (receive_status != HAL_OK)
                         return false;
 
                 bool is_start_scan = memcmp(command,
-                                            PC_COMMANDS[PC_COMMAND_START_SCAN],
-                                            PC_COMMAND_SIZE) == 0;
+                                            HOST_COMMANDS[HOST_COMMAND_START_SCAN],
+                                            HOST_COMMAND_SIZE) == 0;
 
                 if (is_start_scan)
                         return true;
@@ -192,7 +192,7 @@ static bool wait_for_start_scan(void)
 }
 
 /**
- * @brief Record a startup failure and report it to the PC when possible.
+ * @brief Record a startup failure and report it to the host when possible.
  *
  * @param tx_frame Writable TX slot, or NULL when no slot was available.
  * @return false so callers can return this function directly.
@@ -205,7 +205,7 @@ static bool fail_startup(uint8_t* tx_frame)
                 GPIO_PIN_SET);
 
         if (tx_frame != NULL)
-                (void)send_pc_system_message(
+                (void)send_host_system_message(
                         tx_frame,
                         FRAME_TYPE_STARTUP_FAILED,
                         FAILURE_MESSAGE);
@@ -216,20 +216,20 @@ static bool fail_startup(uint8_t* tx_frame)
  * @brief Complete the blocking handshake and start continuous LiDAR reception.
  *
  * The sequence reports initialization, forwards device information and health,
- * reports readiness, waits for PC permission, arms RX DMA, and starts scanning.
+ * reports readiness, waits for host permission, arms RX DMA, and starts scanning.
  * Any failed step sets the startup-failure pin and stops the sequence.
  *
  * @return true after RX DMA and LiDAR scanning have both started.
  */
 bool run_startup_sequence(void)
 {
-        // Startup owns this free slot until all blocking PC transmissions finish.
+        // Startup owns this free slot until all blocking host transmissions finish.
         TxBufSlot* tx_slot = get_empty_buf();
         if (tx_slot == NULL)
                 return fail_startup(NULL);
         uint8_t* tx_frame = (uint8_t*)tx_slot->_buf;
 
-        bool initializing_sent = send_pc_system_message(
+        bool initializing_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_INITIALIZING,
                 INITIALIZING_MESSAGE);
@@ -253,7 +253,7 @@ bool run_startup_sequence(void)
                 return fail_startup(tx_frame);
 
         bool ready_sent =
-                send_pc_system_message(tx_frame, FRAME_TYPE_READY, READY_MESSAGE);
+                send_host_system_message(tx_frame, FRAME_TYPE_READY, READY_MESSAGE);
         if (!ready_sent)
                 return fail_startup(tx_frame);
 

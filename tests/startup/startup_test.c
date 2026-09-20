@@ -18,16 +18,16 @@ GPIO_TypeDef       initial_handshake_failed_port;
 
 typedef enum
 {
-        EVENT_PC_INITIALIZING,
+        EVENT_HOST_INITIALIZING,
         EVENT_LIDAR_DEVICE_REQUEST,
-        EVENT_PC_DEVICE_INFO,
+        EVENT_HOST_DEVICE_INFO,
         EVENT_LIDAR_HEALTH_REQUEST,
-        EVENT_PC_HEALTH_STATUS,
-        EVENT_PC_READY,
+        EVENT_HOST_HEALTH_STATUS,
+        EVENT_HOST_READY,
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
         EVENT_FAILURE_PIN_SET,
-        EVENT_PC_FAILURE,
+        EVENT_HOST_FAILURE,
 } Event;
 
 #define EVENT_CAPACITY 16u
@@ -35,7 +35,7 @@ typedef enum
 static Event     events[EVENT_CAPACITY];
 static size_t    event_count;
 static uint32_t  lidar_receive_count;
-static uint32_t  pc_receive_count;
+static uint32_t  host_receive_count;
 static bool      malformed_health_reply;
 static TxBufSlot startup_slot;
 static int8_t    rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
@@ -65,7 +65,7 @@ static void reset_test_state(void)
         memset(events, 0, sizeof(events));
         event_count            = 0u;
         lidar_receive_count    = 0u;
-        pc_receive_count       = 0u;
+        host_receive_count     = 0u;
         malformed_health_reply = false;
         memset(&startup_slot, 0, sizeof(startup_slot));
         memset(rx_storage, 0, sizeof(rx_storage));
@@ -106,20 +106,20 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         assert(huart == &huart2);
         if (payload_equals(data, length, "INITIALIZING\r\n")) {
                 assert(data[5] == FRAME_TYPE_INITIALIZING);
-                record_event(EVENT_PC_INITIALIZING);
+                record_event(EVENT_HOST_INITIALIZING);
         } else if (payload_equals(data, length, "READY\r\n")) {
                 assert(data[5] == FRAME_TYPE_READY);
-                record_event(EVENT_PC_READY);
+                record_event(EVENT_HOST_READY);
         } else if (payload_equals(data, length, "STARTUP FAILED\r\n")) {
                 assert(data[5] == FRAME_TYPE_STARTUP_FAILED);
-                record_event(EVENT_PC_FAILURE);
+                record_event(EVENT_HOST_FAILURE);
         } else {
                 assert(length == 1u);
                 if (data[0] == SYS_TYPE_CODE_DEVICE_INFO)
-                        record_event(EVENT_PC_DEVICE_INFO);
+                        record_event(EVENT_HOST_DEVICE_INFO);
                 else {
                         assert(data[0] == SYS_TYPE_CODE_HEALTH);
-                        record_event(EVENT_PC_HEALTH_STATUS);
+                        record_event(EVENT_HOST_HEALTH_STATUS);
                 }
         }
         return HAL_OK;
@@ -148,12 +148,12 @@ HAL_StatusTypeDef HAL_UART_Receive(
         }
 
         assert(huart == &huart2);
-        assert(length == PC_COMMAND_SIZE);
+        assert(length == HOST_COMMAND_SIZE);
         assert(timeout == HAL_MAX_DELAY);
-        if (pc_receive_count++ == 0u)
-                memcpy(data, PC_COMMANDS[PC_COMMAND_GET_STATUS], PC_COMMAND_SIZE);
+        if (host_receive_count++ == 0u)
+                memcpy(data, HOST_COMMANDS[HOST_COMMAND_GET_STATUS], HOST_COMMAND_SIZE);
         else
-                memcpy(data, PC_COMMANDS[PC_COMMAND_START_SCAN], PC_COMMAND_SIZE);
+                memcpy(data, HOST_COMMANDS[HOST_COMMAND_START_SCAN], HOST_COMMAND_SIZE);
         return HAL_OK;
 }
 
@@ -204,7 +204,7 @@ HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length)
 
 static void startup_follows_the_documented_order(void)
 {
-        // 準備: PCから無関係なコマンドを1回受けてからscan開始を受ける。
+        // 準備: hostから無関係なコマンドを1回受けてからscan開始を受ける。
         reset_test_state();
 
         // 実行
@@ -212,18 +212,18 @@ static void startup_follows_the_documented_order(void)
 
         // 検証: DMAはLiDARへscan開始を送る前に開始する。
         const Event expected[] = {
-                EVENT_PC_INITIALIZING,
+                EVENT_HOST_INITIALIZING,
                 EVENT_LIDAR_DEVICE_REQUEST,
-                EVENT_PC_DEVICE_INFO,
+                EVENT_HOST_DEVICE_INFO,
                 EVENT_LIDAR_HEALTH_REQUEST,
-                EVENT_PC_HEALTH_STATUS,
-                EVENT_PC_READY,
+                EVENT_HOST_HEALTH_STATUS,
+                EVENT_HOST_READY,
                 EVENT_DMA_STARTED,
                 EVENT_LIDAR_SCAN_REQUEST,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
-        assert(pc_receive_count == 2u);
+        assert(host_receive_count == 2u);
 }
 
 static void invalid_health_reply_stops_startup(void)
@@ -235,18 +235,18 @@ static void invalid_health_reply_stops_startup(void)
         // 実行
         assert(!run_startup_sequence());
 
-        // 検証: 失敗をPCへ通知し、ready・DMA・scan開始へ進まない。
+        // 検証: 失敗をhostへ通知し、ready・DMA・scan開始へ進まない。
         const Event expected[] = {
-                EVENT_PC_INITIALIZING,
+                EVENT_HOST_INITIALIZING,
                 EVENT_LIDAR_DEVICE_REQUEST,
-                EVENT_PC_DEVICE_INFO,
+                EVENT_HOST_DEVICE_INFO,
                 EVENT_LIDAR_HEALTH_REQUEST,
                 EVENT_FAILURE_PIN_SET,
-                EVENT_PC_FAILURE,
+                EVENT_HOST_FAILURE,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
-        assert(pc_receive_count == 0u);
+        assert(host_receive_count == 0u);
 }
 
 int main(void)

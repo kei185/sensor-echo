@@ -22,14 +22,14 @@ typedef enum
 
 typedef enum
 {
-        PC_COMMAND_GET_STATUS,
-        PC_COMMAND_START_SCAN,
-        PC_COMMAND_END_SCAN,
-        PC_COMMAND_COUNT,
-} PcCommand;
+        HOST_COMMAND_GET_STATUS,
+        HOST_COMMAND_START_SCAN,
+        HOST_COMMAND_END_SCAN,
+        HOST_COMMAND_COUNT,
+} HostCommand;
 
-#define PC_COMMAND_SIZE 2u
+#define HOST_COMMAND_SIZE 2u
 
-extern const uint8_t PC_COMMANDS[PC_COMMAND_COUNT][PC_COMMAND_SIZE];
+extern const uint8_t HOST_COMMANDS[HOST_COMMAND_COUNT][HOST_COMMAND_SIZE];
 
 #endif

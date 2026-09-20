@@ -1,24 +1,24 @@
 # Startup Sequence
 
-Startup uses blocking UART transfers. Scan data uses DMA after the PC sends the
+Startup uses blocking UART transfers. Scan data uses DMA after the host sends the
 start scan command.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant PC
+    participant Host
     participant Controller
     participant LiDAR
 
-    Controller->>PC: INITIALIZING system frame
+    Controller->>Host: INITIALIZING system frame
     Controller->>LiDAR: Device information request A5 90
     LiDAR-->>Controller: Device information response
-    Controller->>PC: Device information system frame
+    Controller->>Host: Device information system frame
     Controller->>LiDAR: Health status request A5 92
     LiDAR-->>Controller: Health status response
-    Controller->>PC: Health status system frame
-    Controller->>PC: READY system frame
-    PC->>Controller: Start scan command AA A2
+    Controller->>Host: Health status system frame
+    Controller->>Host: READY system frame
+    Host->>Controller: Start scan command AA A2
     Controller->>Controller: Start circular LiDAR RX DMA
     Controller->>LiDAR: Start scan command A5 60
     LiDAR-->>Controller: Continuous scan stream
@@ -31,7 +31,7 @@ starts before `A5 60`, so the controller can receive the first scan bytes.
 If UART communication or reply validation fails, the controller sends a
 `STARTUP FAILED` system frame and does not start scanning.
 
-## PC-to-Controller Commands
+## Host-to-Controller Commands
 
 Each command is exactly two bytes and has no terminator.
 
@@ -64,7 +64,7 @@ System message types start at `0x04`; type `0x00` is not used. Their payloads ar
 ASCII text ending in `\r\n`, without a NUL byte. The payload starts immediately
 after the 10-byte TX header. Its length includes the two line-ending bytes.
 
-| Type | Event | PC system message payload |
+| Type | Event | Host system message payload |
 |---|---|---|
 | `0x04` | Startup begins | `INITIALIZING\r\n` |
 | `0x05` | Device information | `LiDAR DEVICE: model=N firmware=M.m hardware=H serial=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\r\n` |

@@ -9,7 +9,7 @@
 // extern bool enc_arrived;
 
 void loop(void);
-/* `to` needs CORE_TX_BUF_SIZE bytes. Return the complete PC frame size,
+/* `to` needs CORE_TX_BUF_SIZE bytes. Return the complete host frame size,
  * or zero if translation fails. */
 size_t translate(int8_t* to);
 
