@@ -84,15 +84,19 @@ static bool is_expected_lidar_reply(
         if (expected_reply_length != SYS_PACKET_META_SIZE + expected_content_length)
                 return false;
 
-        // Bits 0-29 contain the content length; bits 30-31 contain the response mode.
+        // Meta bytes 2-5 store the 32-bit length/mode field in little-endian order.
         uint32_t length_mode = (uint32_t)reply[2] | ((uint32_t)reply[3] << 8u) |
                                ((uint32_t)reply[4] << 16u) | ((uint32_t)reply[5] << 24u);
 
+        // Meta bytes 0-1 are the fixed 0xA5, 0x5A response header.
         bool has_expected_header =
                 reply[0] == SYS_PACKET_HEADER_MSB && reply[1] == SYS_PACKET_HEADER_LSB;
+        // 0x3fffffff keeps the content length stored in bits 0-29.
         bool has_expected_length = (length_mode & 0x3fffffffu) == expected_content_length;
-        bool is_single_response  = (length_mode >> 30u) == SYS_RES_MODE_SINGLE;
-        bool has_expected_type   = reply[6] == (uint8_t)expected_type;
+        // Shifting by 30 moves the response mode from bits 30-31 to bits 0-1.
+        bool is_single_response = (length_mode >> 30u) == SYS_RES_MODE_SINGLE;
+        // Meta byte 6 identifies the content that follows the meta header.
+        bool has_expected_type = reply[6] == (uint8_t)expected_type;
 
         return has_expected_header && has_expected_length && is_single_response &&
                has_expected_type;
