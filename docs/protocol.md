@@ -16,14 +16,15 @@ flowchart LR
     rx_dma --> rx_ring["4096-byte circular RX ring"]
     rx_ring --> free{"TX slot free?"}
     free -- No --> pause["Keep CPU read position"]
-    pause --> rx_ring
-    free -- Yes --> overrun{"DMA passed reader?"}
-    overrun -- Yes --> drop["Drop partial data<br/>Move reader to DMA position"]
+    pause --> free
+    free -- Yes --> before{"DMA already passed reader?"}
+    before -- Yes --> drop["Discard current RX data and any unsent frame<br/>Move reader to DMA position"]
+    before -- No --> parse["Parse bytes and build one host frame"]
+    parse --> after{"DMA passed reader while parsing?"}
+    after -- Yes --> drop
+    after -- No --> tx_queue["Five TX slots"]
     drop --> fresh["Wait for fresh bytes"]
-    overrun -- No --> parse["Parse completed bytes"]
-    fresh --> parse
-    parse --> frame["Build one host frame"]
-    frame --> tx_queue["Five TX slots"]
+    fresh --> free
     tx_queue --> tx_dma["TX DMA"]
     tx_dma --> host["Host"]
 ```
@@ -41,6 +42,9 @@ stateDiagram-v2
     Queued --> Transmitting
     Transmitting --> Free: UART transmission complete
 ```
+
+The queue stores each slot as free or full. The UART state distinguishes a
+queued full slot from the full slot currently being transmitted.
 
 ## RX ring positions
 
@@ -133,5 +137,20 @@ and alignment.
 More slots absorb a short burst. They do not increase the sustained UART
 rate. With 8N1 framing, the maximum payload rate is approximately
 `baud rate / 10` bytes per second.
+
+## LiDAR-only throughput at 230400 bps
+
+| Quantity | Calculation | Result |
+| --- | ---: | ---: |
+| LiDAR point rate | configured ranging rate | 4000 points/s |
+| Host point payload | `4000 * 4` | 16000 bytes/s |
+| UART capacity with 8N1 | `230400 / 10` | 23040 bytes/s |
+| Remaining capacity | `23040 - 16000` | 7040 bytes/s |
+
+At a 6 Hz scan rate, one rotation carries about 667 points. Its host
+point payload is about 2667 bytes, while the UART can send 3840 bytes in the
+same interval. This leaves about 1173 bytes for 10-byte host headers, or a
+theoretical maximum of 117 LiDAR packets per rotation. Actual packet count and
+TX queue occupancy must be measured before using this limit.
 
 For host commands and frame fields, see [frame.md](frame.md).
