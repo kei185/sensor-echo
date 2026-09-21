@@ -22,9 +22,9 @@ typedef enum
 
 typedef enum
 {
-        HOST_COMMAND_GET_STATUS,
+        // HOST_COMMAND_GET_STATUS,
         HOST_COMMAND_START_SCAN,
-        HOST_COMMAND_END_SCAN,
+        // HOST_COMMAND_END_SCAN,
         HOST_COMMAND_COUNT,
 } HostCommand;
 
