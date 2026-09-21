@@ -150,10 +150,13 @@ HAL_StatusTypeDef HAL_UART_Receive(
         assert(huart == &huart2);
         assert(length == HOST_COMMAND_SIZE);
         assert(timeout == HAL_MAX_DELAY);
-        if (host_receive_count++ == 0u)
-                memcpy(data, HOST_COMMANDS[HOST_COMMAND_GET_STATUS], HOST_COMMAND_SIZE);
-        else
+        if (host_receive_count++ == 0u) {
+                // 未対応のコマンドを受けても、scan開始待ちを続ける。
+                const uint8_t unsupported_command[HOST_COMMAND_SIZE] = {0xAA, 0xA1};
+                memcpy(data, unsupported_command, HOST_COMMAND_SIZE);
+        } else {
                 memcpy(data, HOST_COMMANDS[HOST_COMMAND_START_SCAN], HOST_COMMAND_SIZE);
+        }
         return HAL_OK;
 }
 

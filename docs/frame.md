@@ -34,12 +34,11 @@ If UART communication or reply validation fails, the controller sends a
 ## Host-to-Controller Commands
 
 Each command is exactly two bytes and has no terminator.
+Only Start scan is supported. Other two-byte input is ignored during startup.
 
 | Command | Code |
 |---|---|
-| Get status | `0xAA 0xA1` |
 | Start scan | `0xAA 0xA2` |
-| End scan | `0xAA 0xA3` |
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
