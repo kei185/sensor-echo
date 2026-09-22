@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 #include "main.h"
-#include "stm32f4xx_hal_uart.h"
 
 #include "arbiter.h"
 #include "protocol.h"
@@ -19,8 +18,8 @@
 #include "lidar/parser/scan.h"
 
 static const char DEVICE_INFO_MESSAGE_FORMAT[] =
-        "LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u serial=%s\r\n";
-static const char HEALTH_MESSAGE_FORMAT[] = "LiDAR STATUS: %s | code=0x%02X\r\n";
+        "LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u serial=%s";
+static const char HEALTH_MESSAGE_FORMAT[] = "LiDAR STATUS: %s | code=0x%02X";
 
 // bool imu_arrived = false;
 // bool enc_arrived = false;
@@ -28,6 +27,8 @@ void loop()
 {
         if (!run_startup_sequence())
                 Error_Handler();
+
+        SCANNING_GPIO_Port->ODR ^= SCANNING_Pin;
 
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.

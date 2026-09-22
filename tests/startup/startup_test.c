@@ -9,7 +9,6 @@
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "tx/frame.h"
-#include "tx/header.h"
 #include "stm32f4xx_hal_uart.h"
 
 UART_HandleTypeDef huart2;
@@ -26,6 +25,7 @@ typedef enum
         EVENT_HOST_READY,
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
+        EVENT_HOST_START_SCAN_ACK,
         EVENT_FAILURE_PIN_SET,
         EVENT_HOST_FAILURE,
 } Event;
@@ -104,15 +104,18 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         }
 
         assert(huart == &huart2);
-        if (payload_equals(data, length, "INITIALIZING\r\n")) {
+        if (payload_equals(data, length, "INITIALIZING")) {
                 assert(data[5] == FRAME_TYPE_INITIALIZING);
                 record_event(EVENT_HOST_INITIALIZING);
-        } else if (payload_equals(data, length, "READY\r\n")) {
+        } else if (payload_equals(data, length, "READY")) {
                 assert(data[5] == FRAME_TYPE_READY);
                 record_event(EVENT_HOST_READY);
-        } else if (payload_equals(data, length, "STARTUP FAILED\r\n")) {
+        } else if (payload_equals(data, length, "STARTUP FAILED")) {
                 assert(data[5] == FRAME_TYPE_STARTUP_FAILED);
                 record_event(EVENT_HOST_FAILURE);
+        } else if (payload_equals(data, length, "START SCAN ACK")) {
+                assert(data[5] == FRAME_TYPE_START_SCAN_ACK);
+                record_event(EVENT_HOST_START_SCAN_ACK);
         } else {
                 assert(length == 1u);
                 if (data[0] == SYS_TYPE_CODE_DEVICE_INFO)
@@ -150,10 +153,13 @@ HAL_StatusTypeDef HAL_UART_Receive(
         assert(huart == &huart2);
         assert(length == HOST_COMMAND_SIZE);
         assert(timeout == HAL_MAX_DELAY);
-        if (host_receive_count++ == 0u)
-                memcpy(data, HOST_COMMANDS[HOST_COMMAND_GET_STATUS], HOST_COMMAND_SIZE);
-        else
+        if (host_receive_count++ == 0u) {
+                // 未対応コマンドを無視して、次のstart scanを待つことを確認する。
+                const uint8_t unsupported_command[HOST_COMMAND_SIZE] = {0xAA, 0xA1};
+                memcpy(data, unsupported_command, HOST_COMMAND_SIZE);
+        } else {
                 memcpy(data, HOST_COMMANDS[HOST_COMMAND_START_SCAN], HOST_COMMAND_SIZE);
+        }
         return HAL_OK;
 }
 
@@ -210,7 +216,7 @@ static void startup_follows_the_documented_order(void)
         // 実行
         assert(run_startup_sequence());
 
-        // 検証: DMAはLiDARへscan開始を送る前に開始する。
+        // 検証: ACKを返してからDMAを開始し、その後にLiDARへscan開始を送る。
         const Event expected[] = {
                 EVENT_HOST_INITIALIZING,
                 EVENT_LIDAR_DEVICE_REQUEST,
@@ -218,6 +224,7 @@ static void startup_follows_the_documented_order(void)
                 EVENT_LIDAR_HEALTH_REQUEST,
                 EVENT_HOST_HEALTH_STATUS,
                 EVENT_HOST_READY,
+                EVENT_HOST_START_SCAN_ACK,
                 EVENT_DMA_STARTED,
                 EVENT_LIDAR_SCAN_REQUEST,
         };

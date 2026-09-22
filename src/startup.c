@@ -15,9 +15,10 @@
 
 #define STARTUP_UART_TIMEOUT_MS 100u
 
-static const char INITIALIZING_MESSAGE[] = "INITIALIZING\r\n";
-static const char READY_MESSAGE[]        = "READY\r\n";
-static const char FAILURE_MESSAGE[]      = "STARTUP FAILED\r\n";
+static const char INITIALIZING_MESSAGE[]   = "INITIALIZING";
+static const char READY_MESSAGE[]          = "READY";
+static const char FAILURE_MESSAGE[]        = "STARTUP FAILED";
+static const char START_SCAN_ACK_MESSAGE[] = "START SCAN ACK";
 
 /**
  * @brief Build and send one system-message frame to the host.
@@ -220,10 +221,11 @@ static bool fail_startup(uint8_t* tx_frame)
  * @brief Complete the blocking handshake and start continuous LiDAR reception.
  *
  * The sequence reports initialization, forwards device information and health,
- * reports readiness, waits for host permission, arms RX DMA, and starts scanning.
- * Any failed step sets the startup-failure pin and stops the sequence.
+ * reports readiness, waits for host permission, acknowledges it, arms RX DMA,
+ * and starts scanning. Any failed step sets the startup-failure pin and stops
+ * the sequence.
  *
- * @return true after RX DMA and LiDAR scanning have both started.
+ * @return true after the ACK and LiDAR start-scan command are both sent.
  */
 bool run_startup_sequence(void)
 {
@@ -233,6 +235,9 @@ bool run_startup_sequence(void)
                 return fail_startup(NULL);
         uint8_t* tx_frame = tx_slot->_buf;
 
+        /**
+         * send initializing message
+         */
         bool initializing_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_INITIALIZING,
@@ -240,6 +245,9 @@ bool run_startup_sequence(void)
         if (!initializing_sent)
                 return fail_startup(tx_frame);
 
+        /**
+         * forward device info
+         */
         bool device_info_forwarded = request_and_forward_lidar_message(
                 tx_frame,
                 MSG_TYPE_RX_SYS_INFO,
@@ -248,6 +256,9 @@ bool run_startup_sequence(void)
         if (!device_info_forwarded)
                 return fail_startup(tx_frame);
 
+        /**
+         * forward health
+         */
         bool health_status_forwarded = request_and_forward_lidar_message(
                 tx_frame,
                 MSG_TYPE_RX_HEALTH,
@@ -256,13 +267,26 @@ bool run_startup_sequence(void)
         if (!health_status_forwarded)
                 return fail_startup(tx_frame);
 
+        /**
+         * send ready
+         */
         bool ready_sent =
                 send_host_system_message(tx_frame, FRAME_TYPE_READY, READY_MESSAGE);
         if (!ready_sent)
                 return fail_startup(tx_frame);
 
+        /**
+         * wait for start command from the host
+         */
         bool start_scan_requested = wait_for_start_scan();
         if (!start_scan_requested)
+                return fail_startup(tx_frame);
+
+        bool start_scan_ack_sent = send_host_system_message(
+                tx_frame,
+                FRAME_TYPE_START_SCAN_ACK,
+                START_SCAN_ACK_MESSAGE);
+        if (!start_scan_ack_sent)
                 return fail_startup(tx_frame);
 
         // Arm RX before the scan command so the first scan bytes cannot be lost.

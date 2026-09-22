@@ -7,6 +7,8 @@
 #include "stm32f446xx.h"
 #include "lidar/core.h"
 
+// TODO このファイルデカい
+
 /*
  * is_safe_read() requires:
  *

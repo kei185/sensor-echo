@@ -47,7 +47,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/parser/health.c
     src/lidar/parser/device_info.c
     src/lidar/parser/scan.c
-    src/lidar/lidar.c
     src/lidar/sys.c
     src/lidar/core.c
     src/tx/frame.c

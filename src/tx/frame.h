@@ -18,13 +18,14 @@ typedef enum
         FRAME_TYPE_HEALTH_STATUS  = 0x06,
         FRAME_TYPE_READY          = 0x07,
         FRAME_TYPE_STARTUP_FAILED = 0x08,
+        FRAME_TYPE_START_SCAN_ACK = 0x09,
 } FrameType;
 
 typedef enum
 {
-        HOST_COMMAND_GET_STATUS,
+        // HOST_COMMAND_GET_STATUS,
         HOST_COMMAND_START_SCAN,
-        HOST_COMMAND_END_SCAN,
+        // HOST_COMMAND_END_SCAN,
         HOST_COMMAND_COUNT,
 } HostCommand;
 
