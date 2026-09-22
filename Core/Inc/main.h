@@ -71,8 +71,8 @@ extern "C"
 #define USART_RX_GPIO_Port                 GPIOA
 #define LD2_Pin                            GPIO_PIN_5
 #define LD2_GPIO_Port                      GPIOA
-#define RX_FRAMING_MISSING_Pin             GPIO_PIN_1
-#define RX_FRAMING_MISSING_GPIO_Port       GPIOB
+#define SCANNING_Pin                       GPIO_PIN_1
+#define SCANNING_GPIO_Port                 GPIOB
 #define INITIAL_HANDSHAKE_FAILED_Pin       GPIO_PIN_2
 #define INITIAL_HANDSHAKE_FAILED_GPIO_Port GPIOB
 #define TMS_Pin                            GPIO_PIN_13
