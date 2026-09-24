@@ -85,19 +85,34 @@ digits. Model, firmware, and hardware values are unsigned decimal numbers.
 
 ### LiDAR frame payload
 
-Size: 4 bytes per point (2 bytes for distance and 2 bytes for angle).
+Size: 4 bytes per point (2 bytes for distance and 2 bytes for angle). The
+distance field comes first, followed by the angle field. Each 16-bit field is
+little-endian on the wire: its least-significant byte is transmitted first.
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 
 packet
-+16: "16bit unsigned distance"
-+16: "16bit unsigned angle in Q6 degrees [0, 360)"
++8: "distance low byte"
++8: "distance high byte"
++8: "angle Q6 low byte"
++8: "angle Q6 high byte"
 ```
 
 The angle value is degrees multiplied by 64; for example, 45.5° is 2912.
 Angles rotate clockwise from the LiDAR's zero direction. The encoded range is
 0..23039; 360° wraps to zero.
+
+For example, a point at distance 7161 (`0x1BF9`) and angle 10°
+(`10 * 64 = 640 = 0x0280`) is transmitted as:
+
+| Byte offset | `0` | `1` | `2` | `3` |
+|---:|---:|---:|---:|---:|
+| Wire byte | `F9` | `1B` | `80` | `02` |
+| Field | distance low | distance high | angle low | angle high |
+
+This little-endian order applies to the two fields inside each LiDAR point.
+The payload length and timestamp in the frame header remain big-endian.
 
 The RX ring and TX queue design are described in [protocol.md](protocol.md).
 
