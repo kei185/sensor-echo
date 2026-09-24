@@ -39,17 +39,17 @@ static void test_complete_frame(void)
                 3u,
                 FRAME_TYPE_LIDAR,
                 0x12345678u);
-        // Length 0x0003 has libcrc CRC 0x53. The CRC covers those two bytes only.
+        // Length 0x0003 is sent as 03 00 and has libcrc CRC 0x2D.
         const uint8_t expected[] = {0xaau,
                                     0x55u,
-                                    0x00u,
                                     0x03u,
-                                    0x53u,
+                                    0x00u,
+                                    0x2du,
                                     0x01u,
-                                    0x12u,
-                                    0x34u,
-                                    0x56u,
                                     0x78u,
+                                    0x56u,
+                                    0x34u,
+                                    0x12u,
                                     0x01u,
                                     0x02u,
                                     0x03u};
@@ -61,7 +61,7 @@ static void test_complete_frame(void)
 }
 
 /**
- * Confirm that a length above 255 is encoded high byte first. The timestamp
+ * Confirm that a length above 255 is encoded low byte first. The timestamp
  * and the last payload byte also guard against byte swaps or a short transfer.
  */
 static void test_multibyte_length(void)
@@ -79,13 +79,16 @@ static void test_multibyte_length(void)
                 0x89abcdefu);
 
         assert(size == sizeof(frame));
-        // 258 decimal is 0x0102, so the wire bytes must be 0x01 then 0x02.
-        assert(frame[2] == 0x01u);
-        assert(frame[3] == 0x02u);
-        // libcrc over the two length bytes 0x01 0x02 returns 0x96.
-        assert(frame[4] == 0x96u);
-        // The final timestamp byte is 0xEF in big-endian wire order.
-        assert(frame[9] == 0xefu);
+        // 258 decimal is 0x0102, so the wire bytes must be 0x02 then 0x01.
+        assert(frame[2] == 0x02u);
+        assert(frame[3] == 0x01u);
+        // libcrc over the two length bytes 0x02 0x01 returns 0xE8.
+        assert(frame[4] == 0xe8u);
+        // Timestamp 0x89ABCDEF is transmitted least-significant byte first.
+        assert(frame[6] == 0xefu);
+        assert(frame[7] == 0xcdu);
+        assert(frame[8] == 0xabu);
+        assert(frame[9] == 0x89u);
         // Both ends of the already-written payload must remain in place.
         assert(frame[TX_FRAME_HEADER_SIZE] == 0x00u);
         assert(frame[sizeof(frame) - 1u] == 0x01u);
