@@ -19,14 +19,14 @@ size_t tx_frame_write_header(
 
         tx_buf[0]                   = START_OF_FRAME[0];
         tx_buf[1]                   = START_OF_FRAME[1];
-        tx_buf[2]                   = (uint8_t)(payload_len >> 8);
-        tx_buf[3]                   = (uint8_t)payload_len;
+        tx_buf[2]                   = (uint8_t)payload_len;
+        tx_buf[3]                   = (uint8_t)(payload_len >> 8);
         tx_buf[TX_FRAME_CRC_OFFSET] = 0u;
         tx_buf[5]                   = (uint8_t)type;
-        tx_buf[6]                   = (uint8_t)(timestamp >> 24);
-        tx_buf[7]                   = (uint8_t)(timestamp >> 16);
-        tx_buf[8]                   = (uint8_t)(timestamp >> 8);
-        tx_buf[9]                   = (uint8_t)timestamp;
+        tx_buf[6]                   = (uint8_t)timestamp;
+        tx_buf[7]                   = (uint8_t)(timestamp >> 8);
+        tx_buf[8]                   = (uint8_t)(timestamp >> 16);
+        tx_buf[9]                   = (uint8_t)(timestamp >> 24);
 
         // NOTE: Extend coverage to the whole frame if the scan-time budget allows it.
         // uint8_t crc = crc_8(tx_buf, TX_FRAME_CRC_OFFSET);

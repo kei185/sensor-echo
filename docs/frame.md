@@ -56,10 +56,11 @@ Each command is exactly two bytes and has no terminator.
 |0xAA55|-|-| 0x08  Startup failed |-| `STARTUP FAILED` |
 |0xAA55|-|-| 0x09  Start scan acknowledged |-| `START SCAN ACK` |
 
-The header is 10 bytes. The start-of-frame bytes are `0xAA 0x55`; payload length
-and timestamp are big-endian. The payload begins at `tx_buf + 10`, so it can
-be written before the header. Payload length counts payload bytes only.
-The timestamp is the controller's millisecond tick when the frame is built.
+The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
+`0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
+at `tx_buf + 10`, so it can be written before the header. Payload length counts
+payload bytes only. The timestamp is the controller's millisecond tick when the
+frame is built. CRC and type are one byte each and therefore have no byte order.
 
 ### System Message
 
@@ -111,8 +112,9 @@ For example, a point at distance 7161 (`0x1BF9`) and angle 10°
 | Wire byte | `F9` | `1B` | `80` | `02` |
 | Field | distance low | distance high | angle low | angle high |
 
-This little-endian order applies to the two fields inside each LiDAR point.
-The payload length and timestamp in the frame header remain big-endian.
+The same little-endian order is used by the payload length and timestamp in the
+frame header. All currently defined multi-byte numeric fields in the host frame
+are therefore little-endian.
 
 The RX ring and TX queue design are described in [protocol.md](protocol.md).
 
