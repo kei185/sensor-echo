@@ -182,7 +182,7 @@ void setup_blocking_rx(size_t length)
         rx_buf.lap      = 0u;
 }
 
-size_t translate(uint8_t* to)
+size_t translate_single(uint8_t* to)
 {
         assert(to != NULL);
         uint8_t reply_type = RX_BUF->_buf[6];
@@ -216,7 +216,7 @@ static void startup_follows_the_documented_order(void)
         // 実行
         assert(run_startup_sequence());
 
-        // 検証: ACKを返してからDMAを開始し、その後にLiDARへscan開始を送る。
+        // 検証: ACKを返してDMAを開始する。LiDARへのscan開始はloop()が行う。
         const Event expected[] = {
                 EVENT_HOST_INITIALIZING,
                 EVENT_LIDAR_DEVICE_REQUEST,
@@ -226,7 +226,6 @@ static void startup_follows_the_documented_order(void)
                 EVENT_HOST_READY,
                 EVENT_HOST_START_SCAN_ACK,
                 EVENT_DMA_STARTED,
-                EVENT_LIDAR_SCAN_REQUEST,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
@@ -242,7 +241,7 @@ static void invalid_health_reply_stops_startup(void)
         // 実行
         assert(!run_startup_sequence());
 
-        // 検証: 失敗をhostへ通知し、ready・DMA・scan開始へ進まない。
+        // 検証: 失敗をhostへ通知し、ready・DMAへ進まない。
         const Event expected[] = {
                 EVENT_HOST_INITIALIZING,
                 EVENT_LIDAR_DEVICE_REQUEST,
