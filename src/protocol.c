@@ -8,6 +8,7 @@
 #include "arbiter.h"
 #include "protocol.h"
 #include "startup.h"
+#include "stm32f4xx_hal_gpio.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 #include "lidar/sys.h"
@@ -21,12 +22,36 @@ static const char DEVICE_INFO_MESSAGE_FORMAT[] =
         "LiDAR DEVICE: model=%u firmware=%u.%u hardware=%u serial=%s";
 static const char HEALTH_MESSAGE_FORMAT[] = "LiDAR STATUS: %s | code=0x%02X";
 
+static size_t translate_scan_frame(uint8_t*);
+
 // bool imu_arrived = false;
 // bool enc_arrived = false;
 void loop()
 {
         if (!run_startup_sequence())
                 Error_Handler();
+
+        // send start scan command
+        HAL_StatusTypeDef scan_start_status =
+                HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_SCAN], MSG_SIZE, 100);
+
+        if (scan_start_status != HAL_OK) {
+                LD2_GPIO_Port->ODR ^= LD2_Pin;
+                Error_Handler();
+        }
+
+        // wait for meta frame for scan
+        ParserMeta meta = {0};
+        read_meta(&meta);
+        if (meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
+            meta.type_code != SYS_TYPE_CODE_SCAN) {
+                HAL_GPIO_WritePin(
+                        INITIAL_HANDSHAKE_FAILED_GPIO_Port,
+                        INITIAL_HANDSHAKE_FAILED_Pin,
+                        1);
+
+                Error_Handler();
+        }
 
         SCANNING_GPIO_Port->ODR ^= SCANNING_Pin;
 
@@ -52,7 +77,7 @@ void loop()
                         continue;
                 }
 
-                size_t len = translate(tbs->_buf);
+                size_t len = translate_scan_frame(tbs->_buf);
                 if (len == 0u || is_lapped()) {
                         reset_read_idx();
                         continue;
@@ -116,7 +141,7 @@ static size_t translate_health(char* to, const ParserHealth* health)
 /*
  * @param to points to the head of the payload field
  */
-static size_t translate_frame_content(uint8_t* to, SysTypeCode type)
+static size_t translate_system_frame_content(uint8_t* to, SysTypeCode type)
 {
 
         ParserDeviceInfo info;
@@ -135,24 +160,42 @@ static size_t translate_frame_content(uint8_t* to, SysTypeCode type)
                                 return 0u;
                         return translate_health((char*)to, &health);
 
-                case SYS_TYPE_CODE_SCAN:
-                        return (size_t)read_scan_frame((ParserScannedPoint*)to) *
-                               sizeof(ParserScannedPoint);
+                        // case SYS_TYPE_CODE_SCAN:
+                        //         return (size_t)read_scan_frame((ParserScannedPoint*)to)
+                        //         *
+                        //                sizeof(ParserScannedPoint);
 
                 default:
                         return 0u;
         }
 }
 
+static size_t translate_scan_frame(uint8_t* to)
+{
+        // number of points
+        size_t payload_length =
+                (size_t)read_scan_frame((ParserScannedPoint*)(to + TX_FRAME_HEADER_SIZE));
+
+        // size of total points
+        payload_length *= sizeof(ParserScannedPoint);
+
+        if (payload_length == 0u || payload_length > UINT16_MAX)
+                return 0u;
+
+        return tx_frame_write_header(
+                to,
+                CORE_TX_BUF_SIZE,
+                (uint16_t)payload_length,
+                FRAME_TYPE_LIDAR,
+                HAL_GetTick());
+}
+
 /**
  * @param to points to the beginning of a TX frame
  * @return complete TX frame size, or zero if translation fails
  */
-size_t translate(uint8_t* to)
+size_t translate_single(uint8_t* to)
 {
-        if (to == NULL)
-                return 0u;
-
         ParserMeta meta = {0};
         if (read_meta(&meta) == NULL)
                 return 0u;
@@ -160,7 +203,7 @@ size_t translate(uint8_t* to)
         uint8_t* writer_payload_head = to + TX_FRAME_HEADER_SIZE;
 
         size_t payload_length =
-                translate_frame_content(writer_payload_head, meta.type_code);
+                translate_system_frame_content(writer_payload_head, meta.type_code);
 
         if (payload_length == 0u || payload_length > UINT16_MAX)
                 return 0u;
@@ -173,9 +216,9 @@ size_t translate(uint8_t* to)
                 case SYS_TYPE_CODE_HEALTH:
                         frame_type = FRAME_TYPE_HEALTH_STATUS;
                         break;
-                case SYS_TYPE_CODE_SCAN:
-                        frame_type = FRAME_TYPE_LIDAR;
-                        break;
+                // case SYS_TYPE_CODE_SCAN:
+                //         frame_type = FRAME_TYPE_LIDAR;
+                //         break;
                 default:
                         return 0u;
         }

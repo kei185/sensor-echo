@@ -274,7 +274,7 @@ void UART4_IRQHandler(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
         motor_toggle();
-        GPIOA->ODR ^= GPIO_PIN_5;
+        // GPIOA->ODR ^= GPIO_PIN_5;
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)

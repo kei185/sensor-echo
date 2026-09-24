@@ -151,7 +151,7 @@ static bool request_and_forward_lidar_message(
         if (!is_expected_reply)
                 return false;
 
-        size_t frame_length = translate(tx_frame);
+        size_t frame_length = translate_single(tx_frame);
 
         if (frame_length == 0u)
                 return false;
@@ -282,6 +282,9 @@ bool run_startup_sequence(void)
         if (!start_scan_requested)
                 return fail_startup(tx_frame);
 
+        /**
+         * send ack for start scan command
+         */
         bool start_scan_ack_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_START_SCAN_ACK,
@@ -290,21 +293,14 @@ bool run_startup_sequence(void)
                 return fail_startup(tx_frame);
 
         // Arm RX before the scan command so the first scan bytes cannot be lost.
+        // set global buffer object
         setup_nonblocking_rx();
 
+        // setting dma peripheral
         HAL_StatusTypeDef dma_start_status =
                 HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE);
 
         if (dma_start_status != HAL_OK)
-                return fail_startup(tx_frame);
-
-        HAL_StatusTypeDef scan_start_status = HAL_UART_Transmit(
-                &huart4,
-                MSG[MSG_TYPE_SCAN],
-                MSG_SIZE,
-                STARTUP_UART_TIMEOUT_MS);
-
-        if (scan_start_status != HAL_OK)
                 return fail_startup(tx_frame);
 
         return true;
