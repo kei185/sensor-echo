@@ -199,4 +199,15 @@ typedef enum
         IMU_GYRO_ODR_7_68_KHZ   = 0x0C,
 } ImuGyroOdr;
 
+#include <stdint.h>
+typedef struct
+{
+        uint8_t CTRL1;
+        uint8_t CTRL2;
+        uint8_t CTRL3;
+        uint8_t INT1_CTRL;
+        uint8_t INT2_CTRL;
+        uint8_t IF_CFG;
+} Imu;
+
 #endif /* IMU_SYS_H */

@@ -24,6 +24,9 @@
 /* USER CODE BEGIN Includes */
 #include "arbiter.h"
 #include "motor.h"
+#include "imu/handler.h"
+#include "stm32f4xx_hal_gpio.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -271,19 +274,17 @@ void USART2_IRQHandler(void)
         /* USER CODE END USART2_IRQn 1 */
 }
 
-/**
- * @brief This function handles EXTI line[15:10] interrupts.
- */
-void EXTI15_10_IRQHandler(void)
+void EXTI0_IRQHandler(void)
 {
-        /* USER CODE BEGIN EXTI15_10_IRQn 0 */
+        //
+        HAL_GPIO_EXTI_IRQHandler(IMU_INT1_Pin);
+};
 
-        /* USER CODE END EXTI15_10_IRQn 0 */
-        HAL_GPIO_EXTI_IRQHandler(B1_Pin);
-        /* USER CODE BEGIN EXTI15_10_IRQn 1 */
-
-        /* USER CODE END EXTI15_10_IRQn 1 */
-}
+void EXTI3_IRQHandler(void)
+{
+        //
+        HAL_GPIO_EXTI_IRQHandler(IMU_INT2_Pin);
+};
 
 /**
  * @brief This function handles UART4 global interrupt.
@@ -316,6 +317,16 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
 {
         if (huart == &huart2)
                 uart_transmit_complete_handler();
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+        if (GPIO_Pin == IMU_INT1_Pin) {
+                imu_accel_ready = true;
+        }
+        if (GPIO_Pin == IMU_INT2_Pin) {
+                imu_rot_ready = true;
+        }
 }
 
 /* USER CODE END 1 */
