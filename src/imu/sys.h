@@ -130,6 +130,91 @@ typedef enum
         IMU_REG_FIFO_DATA_OUT_Z_H = 0x7E,
 } ImuRegisterAddress;
 
+#define IMU_CTRL1_DEFAULT     0x00u
+#define IMU_CTRL2_DEFAULT     0x00u
+#define IMU_CTRL3_DEFAULT     0x44u
+#define IMU_INT1_CTRL_DEFAULT 0x00u
+#define IMU_INT2_CTRL_DEFAULT 0x00u
+#define IMU_IF_CFG_DEFAULT    0x00u
+
+#define IMU_CTRL_MODE_MASK 0x70u
+#define IMU_CTRL_ODR_MASK  0x0Fu
+
+/**
+ * @brief CTRL3 field values.
+ *
+ * Select one value for each field and combine them with bitwise OR. BOOT and
+ * SW_RESET are trigger bits that clear automatically.
+ */
+typedef enum
+{
+        IMU_CTRL3_BOOT_NORMAL        = 0x00,
+        IMU_CTRL3_BOOT_REBOOT        = 0x80,
+        IMU_CTRL3_BDU_DISABLED       = 0x00,
+        IMU_CTRL3_BDU_ENABLED        = 0x40,
+        IMU_CTRL3_IF_INC_DISABLED    = 0x00,
+        IMU_CTRL3_IF_INC_ENABLED     = 0x04,
+        IMU_CTRL3_SW_RESET_NORMAL    = 0x00,
+        IMU_CTRL3_SW_RESET_TRIGGERED = 0x01,
+} ImuCtrl3Setting;
+
+/**
+ * @brief Signals routed to the INT1 pin by INT1_CTRL.
+ *
+ * Multiple routes can be combined with bitwise OR.
+ */
+typedef enum
+{
+        IMU_INT1_ROUTE_NONE             = 0x00,
+        IMU_INT1_ROUTE_COUNTER_BDR      = 0x40,
+        IMU_INT1_ROUTE_FIFO_FULL        = 0x20,
+        IMU_INT1_ROUTE_FIFO_OVERRUN     = 0x10,
+        IMU_INT1_ROUTE_FIFO_THRESHOLD   = 0x08,
+        IMU_INT1_ROUTE_GYRO_DATA_READY  = 0x02,
+        IMU_INT1_ROUTE_ACCEL_DATA_READY = 0x01,
+} ImuInt1Route;
+
+/**
+ * @brief Signals routed to the INT2 pin by INT2_CTRL.
+ *
+ * Multiple routes can be combined with bitwise OR.
+ */
+typedef enum
+{
+        IMU_INT2_ROUTE_NONE                  = 0x00,
+        IMU_INT2_ROUTE_EMBEDDED_FUNCTION_END = 0x80,
+        IMU_INT2_ROUTE_COUNTER_BDR           = 0x40,
+        IMU_INT2_ROUTE_FIFO_FULL             = 0x20,
+        IMU_INT2_ROUTE_FIFO_OVERRUN          = 0x10,
+        IMU_INT2_ROUTE_FIFO_THRESHOLD        = 0x08,
+        IMU_INT2_ROUTE_EIS_GYRO_DATA_READY   = 0x04,
+        IMU_INT2_ROUTE_GYRO_DATA_READY       = 0x02,
+        IMU_INT2_ROUTE_ACCEL_DATA_READY      = 0x01,
+} ImuInt2Route;
+
+/**
+ * @brief IF_CFG field values.
+ *
+ * Select one value for each field and combine them with bitwise OR.
+ */
+typedef enum
+{
+        IMU_IF_CFG_SDA_PULL_UP_DISABLED           = 0x00,
+        IMU_IF_CFG_SDA_PULL_UP_ENABLED            = 0x80,
+        IMU_IF_CFG_SENSOR_HUB_PULL_UP_DISABLED    = 0x00,
+        IMU_IF_CFG_SENSOR_HUB_PULL_UP_ENABLED     = 0x40,
+        IMU_IF_CFG_ANTI_SPIKE_PROTOCOL_CONTROLLED = 0x00,
+        IMU_IF_CFG_ANTI_SPIKE_ALWAYS_ENABLED      = 0x20,
+        IMU_IF_CFG_INTERRUPT_ACTIVE_HIGH          = 0x00,
+        IMU_IF_CFG_INTERRUPT_ACTIVE_LOW           = 0x10,
+        IMU_IF_CFG_INTERRUPT_PUSH_PULL            = 0x00,
+        IMU_IF_CFG_INTERRUPT_OPEN_DRAIN           = 0x08,
+        IMU_IF_CFG_SPI_4_WIRE                     = 0x00,
+        IMU_IF_CFG_SPI_3_WIRE                     = 0x04,
+        IMU_IF_CFG_I2C_I3C_ENABLED                = 0x00,
+        IMU_IF_CFG_I2C_I3C_DISABLED               = 0x01,
+} ImuInterfaceSetting;
+
 /**
  * @brief Accelerometer operating modes for CTRL1 OP_MODE_XL[2:0].
  *
