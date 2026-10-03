@@ -163,6 +163,7 @@ const TxBuf* const TX_BUF = &_TX_BUF;
 static inline bool full(void) { return _TX_BUF.slots[_TX_BUF.writer_head].full; }
 
 // reader release buf setting it empty when transmission done
+// increments read_head
 void release(TxBufSlot* slot)
 {
         slot->length = 0;
@@ -174,7 +175,7 @@ void release(TxBufSlot* slot)
                 _TX_BUF.reader_head = 0;
 }
 
-// reader gets a buf to transmit
+// dispatcher gets a buf to transmit
 TxBufSlot* get_full_buf(void)
 {
         TxBufSlot* reader_slot = &_TX_BUF.slots[_TX_BUF.reader_head];
@@ -196,6 +197,7 @@ TxBufSlot* get_empty_buf(void)
         return writer_slot;
 }
 
+// increments write_head
 void push_full_slot(TxBufSlot* slot, uint32_t len)
 {
         slot->length = len;

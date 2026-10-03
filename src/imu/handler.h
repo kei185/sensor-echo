@@ -2,6 +2,7 @@
 #define IMU_HANDLER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct __attribute__((packed))
@@ -11,6 +12,7 @@ typedef struct __attribute__((packed))
         uint16_t z; // yaw
 } Acceleration;
 
+#define IMU_BUF_SIZE 2 * 6 // byte
 typedef struct __attribute__((packed))
 {
         Acceleration trans;
@@ -19,7 +21,9 @@ typedef struct __attribute__((packed))
 
 extern const ImuRxBuf* const IMU_RX_BUF;
 
-extern bool imu_accel_ready;
-extern bool imu_rot_ready;
+extern bool volatile imu_accel_ready;
+extern bool volatile imu_rot_ready;
 
+bool imu_handler(uint8_t*);
+bool imu_setup(void);
 #endif

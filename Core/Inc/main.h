@@ -82,6 +82,8 @@ extern "C"
 #define SCANNING_GPIO_Port                 GPIOB
 #define INITIAL_HANDSHAKE_FAILED_Pin       GPIO_PIN_2
 #define INITIAL_HANDSHAKE_FAILED_GPIO_Port GPIOB
+#define SPI2_CS_Pin                        GPIO_PIN_12
+#define SPI2_CS_GPIO_Port                  GPIOB
 #define TMS_Pin                            GPIO_PIN_13
 #define TMS_GPIO_Port                      GPIOA
 #define TCK_Pin                            GPIO_PIN_14

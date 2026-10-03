@@ -128,7 +128,7 @@ typedef enum
         REG_FIFO_DATA_OUT_Y_H = 0x7C,
         REG_FIFO_DATA_OUT_Z_L = 0x7D,
         REG_FIFO_DATA_OUT_Z_H = 0x7E,
-} ImuRegisterAddress;
+} RegisterAddress;
 
 #define CTRL1_DEFAULT     0x00u
 #define CTRL2_DEFAULT     0x00u
@@ -156,7 +156,7 @@ typedef enum
         CTRL3_IF_INC_ENABLED     = 0x04,
         CTRL3_SW_RESET_NORMAL    = 0x00,
         CTRL3_SW_RESET_TRIGGERED = 0x01,
-} ImuCtrl3Setting;
+} Ctrl3Setting;
 
 /**
  * @brief Signals routed to the INT1 pin by INT1_CTRL.
@@ -165,14 +165,14 @@ typedef enum
  */
 typedef enum
 {
-        INT1_ROUTE_NONE             = 0x00,
-        INT1_ROUTE_COUNTER_BDR      = 0x40,
-        INT1_ROUTE_FIFO_FULL        = 0x20,
-        INT1_ROUTE_FIFO_OVERRUN     = 0x10,
-        INT1_ROUTE_FIFO_THRESHOLD   = 0x08,
-        INT1_ROUTE_GYRO_DATA_READY  = 0x02,
-        INT1_ROUTE_ACCEL_DATA_READY = 0x01,
-} ImuInt1Route;
+        INT1_NONE             = 0x00,
+        INT1_COUNTER_BDR      = 0x40,
+        INT1_FIFO_FULL        = 0x20,
+        INT1_FIFO_OVERRUN     = 0x10,
+        INT1_FIFO_THRESHOLD   = 0x08,
+        INT1_GYRO_DATA_READY  = 0x02,
+        INT1_ACCEL_DATA_READY = 0x01,
+} Int1;
 
 /**
  * @brief Signals routed to the INT2 pin by INT2_CTRL.
@@ -181,16 +181,16 @@ typedef enum
  */
 typedef enum
 {
-        INT2_ROUTE_NONE                  = 0x00,
-        INT2_ROUTE_EMBEDDED_FUNCTION_END = 0x80,
-        INT2_ROUTE_COUNTER_BDR           = 0x40,
-        INT2_ROUTE_FIFO_FULL             = 0x20,
-        INT2_ROUTE_FIFO_OVERRUN          = 0x10,
-        INT2_ROUTE_FIFO_THRESHOLD        = 0x08,
-        INT2_ROUTE_EIS_GYRO_DATA_READY   = 0x04,
-        INT2_ROUTE_GYRO_DATA_READY       = 0x02,
-        INT2_ROUTE_ACCEL_DATA_READY      = 0x01,
-} ImuInt2Route;
+        INT2_NONE                  = 0x00,
+        INT2_EMBEDDED_FUNCTION_END = 0x80,
+        INT2_COUNTER_BDR           = 0x40,
+        INT2_FIFO_FULL             = 0x20,
+        INT2_FIFO_OVERRUN          = 0x10,
+        INT2_FIFO_THRESHOLD        = 0x08,
+        INT2_EIS_GYRO_DATA_READY   = 0x04,
+        INT2_GYRO_DATA_READY       = 0x02,
+        INT2_ACCEL_DATA_READY      = 0x01,
+} Int2;
 
 /**
  * @brief IF_CFG field values.
@@ -213,7 +213,7 @@ typedef enum
         IF_CFG_SPI_3_WIRE                     = 0x04,
         IF_CFG_I2C_I3C_ENABLED                = 0x00,
         IF_CFG_I2C_I3C_DISABLED               = 0x01,
-} ImuInterfaceSetting;
+} InterfaceSetting;
 
 /**
  * @brief Accelerometer operating modes for CTRL1 OP_MODE_XL[2:0].
@@ -229,7 +229,7 @@ typedef enum
         ACCEL_MODE_LOW_POWER_2       = 0x50,
         ACCEL_MODE_LOW_POWER_3       = 0x60,
         ACCEL_MODE_NORMAL            = 0x70,
-} ImuAccelMode;
+} AccelMode;
 
 /**
  * @brief Accelerometer output data rates for CTRL1 ODR_XL[3:0].
@@ -249,7 +249,7 @@ typedef enum
         ACCEL_ODR_1_92_KHZ   = 0x0A,
         ACCEL_ODR_3_84_KHZ   = 0x0B,
         ACCEL_ODR_7_68_KHZ   = 0x0C,
-} ImuAccelOdr;
+} AccelOdr;
 
 /**
  * @brief Gyroscope operating modes for CTRL2 OP_MODE_G[2:0].
@@ -263,7 +263,7 @@ typedef enum
         GYRO_MODE_ODR_TRIGGERED     = 0x30,
         GYRO_MODE_SLEEP             = 0x40,
         GYRO_MODE_LOW_POWER         = 0x50,
-} ImuGyroMode;
+} GyroMode;
 
 /**
  * @brief Gyroscope output data rates for CTRL2 ODR_G[3:0].
@@ -282,17 +282,17 @@ typedef enum
         GYRO_ODR_1_92_KHZ   = 0x0A,
         GYRO_ODR_3_84_KHZ   = 0x0B,
         GYRO_ODR_7_68_KHZ   = 0x0C,
-} ImuGyroOdr;
+} GyroOdr;
 
 #include <stdint.h>
 typedef struct
 {
+        uint8_t IF_CFG;
+        uint8_t INT1_CTRL;
+        uint8_t INT2_CTRL;
         uint8_t CTRL1;
         uint8_t CTRL2;
         uint8_t CTRL3;
-        uint8_t INT1_CTRL;
-        uint8_t INT2_CTRL;
-        uint8_t IF_CFG;
 } Imu;
 
 #endif /* IMU_SYS_H */

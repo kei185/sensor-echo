@@ -4,6 +4,7 @@
 #define TX_FRAME_CRC_OFFSET 4u
 
 // TODO このインターフェース微妙
+// ttx_buf_capacityがいらない
 size_t tx_frame_write_header(
         uint8_t*  tx_buf,
         size_t    tx_buf_capacity,
