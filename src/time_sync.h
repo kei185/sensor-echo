@@ -5,8 +5,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TIME_SYNC_SAMPLE_COUNT   5u
-#define TIME_SYNC_UNIX_TIME_SIZE 8u
+#include "tx/frame.h"
+
+#define TIME_SYNC_SAMPLE_COUNT    5u
+#define TIME_SYNC_UNIX_TIME_SIZE  8u
+#define TIME_SYNC_TIME_FRAME_SIZE (HOST_COMMAND_SIZE + TIME_SYNC_UNIX_TIME_SIZE)
 
 typedef struct
 {
@@ -34,5 +37,15 @@ bool time_sync_record(
 
 /** Format all recorded measurements as one host-frame ASCII payload. */
 size_t time_sync_format_report(char* to, size_t capacity, const TimeSyncSession* session);
+
+/**
+ * Complete one time-sync exchange after the caller receives `0xAA 0xA4`.
+ *
+ * The caller owns the session and a TX frame buffer of `CORE_TX_BUF_SIZE`
+ * bytes. The function sends the start ACK, receives and validates `0xAA 0xA5`
+ * plus the 64-bit time, records one sample, and sends the time ACK. The fifth
+ * call also sends the complete report and resets the session.
+ */
+bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session);
 
 #endif /* TIME_SYNC_H */

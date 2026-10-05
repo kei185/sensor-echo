@@ -30,11 +30,19 @@ typedef enum
         HOST_COMMAND_START_SCAN,
         // HOST_COMMAND_END_SCAN,
         HOST_COMMAND_TIME_SYNC_START,
+        HOST_COMMAND_TIME,
         HOST_COMMAND_COUNT,
 } HostCommand;
 
 #define HOST_COMMAND_SIZE 2u
 
 extern const uint8_t HOST_COMMANDS[HOST_COMMAND_COUNT][HOST_COMMAND_SIZE];
+
+extern const char FRAME_MESSAGE_INITIALIZING[];
+extern const char FRAME_MESSAGE_READY[];
+extern const char FRAME_MESSAGE_STARTUP_FAILED[];
+extern const char FRAME_MESSAGE_START_SCAN_ACK[];
+extern const char FRAME_MESSAGE_TIME_SYNC_START_ACK[];
+extern const char FRAME_MESSAGE_TIME_ACK[];
 
 #endif

@@ -12,10 +12,14 @@ add_executable(time_sync_test
     time_sync_test.c
     ../../src/time_sync.c
     ../../src/tx/frame.c
+    ../../src/tx/header.c
+    ../../lib/libcrc-2.0/src/crc8.c
 )
 
 target_include_directories(time_sync_test PRIVATE
+    stubs
     ../../src
+    ../../lib/libcrc-2.0/include
 )
 
 target_compile_options(time_sync_test PRIVATE

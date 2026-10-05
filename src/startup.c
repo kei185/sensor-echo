@@ -8,47 +8,12 @@
 
 #include "startup.h"
 #include "protocol.h"
-#include "time_sync.h"
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 
 #define STARTUP_UART_TIMEOUT_MS 100u
-
-static const char INITIALIZING_MESSAGE[]        = "INITIALIZING";
-static const char READY_MESSAGE[]               = "READY";
-static const char FAILURE_MESSAGE[]             = "STARTUP FAILED";
-static const char START_SCAN_ACK_MESSAGE[]      = "START SCAN ACK";
-static const char TIME_SYNC_START_ACK_MESSAGE[] = "TIME SYNC START ACK";
-static const char TIME_ACK_MESSAGE[]            = "TIME ACK";
-
-/**
- * @brief Finish and transmit a payload already stored in the TX frame.
- */
-static bool
-send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
-{
-        if (payload_length > CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE)
-                return false;
-
-        size_t frame_length = tx_frame_write_header(
-                tx_frame,
-                CORE_TX_BUF_SIZE,
-                (uint16_t)payload_length,
-                frame_type,
-                HAL_GetTick());
-        if (frame_length == 0u)
-                return false;
-
-        HAL_StatusTypeDef transmit_status = HAL_UART_Transmit(
-                &huart2,
-                tx_frame,
-                (uint16_t)frame_length,
-                STARTUP_UART_TIMEOUT_MS);
-
-        return transmit_status == HAL_OK;
-}
 
 /**
  * @brief Build and send one system-message frame to the host.
@@ -65,12 +30,31 @@ static bool
 send_host_system_message(uint8_t* tx_frame, FrameType frame_type, const char* message)
 {
         const size_t payload_length = strlen(message);
+
         if (payload_length > CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE)
                 return false;
 
         // write message into the frame
         memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, payload_length);
-        return send_host_frame(tx_frame, frame_type, payload_length);
+
+        // write header into the frame
+        size_t frame_length = tx_frame_write_header(
+                tx_frame,
+                CORE_TX_BUF_SIZE,
+                (uint16_t)payload_length,
+                frame_type,
+                HAL_GetTick());
+
+        if (frame_length == 0u)
+                return false;
+
+        HAL_StatusTypeDef transmit_status = HAL_UART_Transmit(
+                &huart2,
+                tx_frame,
+                (uint16_t)frame_length,
+                STARTUP_UART_TIMEOUT_MS);
+
+        return transmit_status == HAL_OK;
 }
 
 /**
@@ -177,68 +161,15 @@ static bool request_and_forward_lidar_message(
 }
 
 /**
- * @brief Handle optional time-sync measurements while waiting to start scanning.
+ * @brief Wait until the host sends the command that permits scanning to start.
  *
- * Unknown two-byte commands are ignored. Five completed time-sync measurements
- * produce one report. A UART receive failure stops startup.
+ * Unknown two-byte commands are ignored. A UART receive failure stops startup.
  *
  * @return true after receiving the start-scan command.
  */
-static bool measure_host_time(uint8_t* tx_frame, TimeSyncSession* time_sync_session)
+static bool wait_for_start_scan(void)
 {
-        // The start ACK asks the host to send its current Unix time.
-        uint32_t req_time       = HAL_GetTick();
-        bool     start_ack_sent = send_host_system_message(
-                tx_frame,
-                FRAME_TYPE_TIME_SYNC_START_ACK,
-                TIME_SYNC_START_ACK_MESSAGE);
-        if (!start_ack_sent)
-                return false;
-
-        uint8_t           encoded_unix_time[TIME_SYNC_UNIX_TIME_SIZE];
-        HAL_StatusTypeDef receive_status = HAL_UART_Receive(
-                &huart2,
-                encoded_unix_time,
-                TIME_SYNC_UNIX_TIME_SIZE,
-                HAL_MAX_DELAY);
-        if (receive_status != HAL_OK)
-                return false;
-
-        uint32_t res_time = HAL_GetTick();
-        uint64_t unixtime;
-        if (!time_sync_decode_unix_time(
-                    encoded_unix_time,
-                    sizeof(encoded_unix_time),
-                    &unixtime) ||
-            !time_sync_record(time_sync_session, req_time, res_time, unixtime))
-                return false;
-
-        bool time_ack_sent =
-                send_host_system_message(tx_frame, FRAME_TYPE_TIME_ACK, TIME_ACK_MESSAGE);
-        if (!time_ack_sent)
-                return false;
-
-        if (time_sync_session->count < TIME_SYNC_SAMPLE_COUNT)
-                return true;
-
-        // Continue directly from the fifth ACK to the complete session report.
-        char*  payload        = (char*)(tx_frame + TX_FRAME_HEADER_SIZE);
-        size_t payload_length = time_sync_format_report(
-                payload,
-                CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE,
-                time_sync_session);
-        if (payload_length == 0u ||
-            !send_host_frame(tx_frame, FRAME_TYPE_TIME_SYNC_REPORT, payload_length))
-                return false;
-
-        *time_sync_session = (TimeSyncSession){0};
-        return true;
-}
-
-static bool wait_for_start_scan(uint8_t* tx_frame)
-{
-        uint8_t         command[HOST_COMMAND_SIZE];
-        TimeSyncSession time_sync_session = {0};
+        uint8_t command[HOST_COMMAND_SIZE];
 
         // Startup remains blocking until the host sends the exact two-byte start command.
         while (true) {
@@ -257,14 +188,6 @@ static bool wait_for_start_scan(uint8_t* tx_frame)
 
                 if (is_start_scan)
                         return true;
-
-                bool is_time_sync_start =
-                        memcmp(command,
-                               HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START],
-                               HOST_COMMAND_SIZE) == 0;
-                if (is_time_sync_start &&
-                    !measure_host_time(tx_frame, &time_sync_session))
-                        return false;
         }
 }
 
@@ -285,7 +208,7 @@ static bool fail_startup(uint8_t* tx_frame)
                 (void)send_host_system_message(
                         tx_frame,
                         FRAME_TYPE_STARTUP_FAILED,
-                        FAILURE_MESSAGE);
+                        FRAME_MESSAGE_STARTUP_FAILED);
         return false;
 }
 
@@ -313,7 +236,7 @@ bool run_startup_sequence(void)
         bool initializing_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_INITIALIZING,
-                INITIALIZING_MESSAGE);
+                FRAME_MESSAGE_INITIALIZING);
         if (!initializing_sent)
                 return fail_startup(tx_frame);
 
@@ -343,14 +266,14 @@ bool run_startup_sequence(void)
          * send ready
          */
         bool ready_sent =
-                send_host_system_message(tx_frame, FRAME_TYPE_READY, READY_MESSAGE);
+                send_host_system_message(tx_frame, FRAME_TYPE_READY, FRAME_MESSAGE_READY);
         if (!ready_sent)
                 return fail_startup(tx_frame);
 
         /**
          * wait for start command from the host
          */
-        bool start_scan_requested = wait_for_start_scan(tx_frame);
+        bool start_scan_requested = wait_for_start_scan();
         if (!start_scan_requested)
                 return fail_startup(tx_frame);
 
@@ -360,7 +283,7 @@ bool run_startup_sequence(void)
         bool start_scan_ack_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_START_SCAN_ACK,
-                START_SCAN_ACK_MESSAGE);
+                FRAME_MESSAGE_START_SCAN_ACK);
         if (!start_scan_ack_sent)
                 return fail_startup(tx_frame);
 

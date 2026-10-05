@@ -44,13 +44,13 @@ has acknowledged `Time sync start`.
 |---|---|---:|
 | Start scan | `0xAA 0xA2` | 2 bytes |
 | Time sync start | `0xAA 0xA4` | 2 bytes |
-| Time | Unsigned 64-bit Unix time in milliseconds, little-endian | 8 bytes |
+| Time | `0xAA 0xA5` followed by unsigned 64-bit Unix time in milliseconds, little-endian | 10 bytes |
 
 After `0xAA 0xA4`, the controller records `req_tick` and replies with
 `TIME SYNC START ACK`. The host then sends an unsigned 64-bit Unix timestamp in
-milliseconds as exactly 8 little-endian bytes. This timestamp has no command
-prefix. The controller records `res_tick` as soon as all 8 bytes arrive and
-replies with `TIME ACK`.
+milliseconds after the two-byte `0xAA 0xA5` command. The controller records
+`res_tick` as soon as the complete 10-byte frame arrives, verifies the command,
+and replies with `TIME ACK`.
 
 The host repeats this four-message exchange five times. After the fifth
 measurement, the controller sends one time-sync report containing all five
@@ -69,7 +69,7 @@ sequenceDiagram
         Host->>Controller: Time sync start AA A4
         Controller->>Controller: Record req_tick
         Controller->>Host: TIME SYNC START ACK, type 0x0A
-        Host->>Controller: Time, 8-byte little-endian Unix milliseconds
+        Host->>Controller: Time AA A5 plus 8-byte little-endian Unix milliseconds
         Controller->>Controller: Record res_tick and store sample
         Controller->>Host: TIME ACK, type 0x0B
     end

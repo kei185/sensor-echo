@@ -11,7 +11,6 @@ enable_testing()
 add_executable(startup_test
     startup_test.c
     ../../src/startup.c
-    ../../src/time_sync.c
     ../../src/lidar/sys.c
     ../../src/tx/frame.c
     ../../src/tx/header.c
