@@ -10,15 +10,16 @@ extern const uint8_t START_OF_FRAME[SOF_SIZE];
 
 typedef enum
 {
-        FRAME_TYPE_LIDAR          = 0x01,
-        FRAME_TYPE_IMU            = 0x02,
-        FRAME_TYPE_ENC            = 0x03,
-        FRAME_TYPE_INITIALIZING   = 0x04,
-        FRAME_TYPE_DEVICE_INFO    = 0x05,
-        FRAME_TYPE_HEALTH_STATUS  = 0x06,
-        FRAME_TYPE_READY          = 0x07,
-        FRAME_TYPE_STARTUP_FAILED = 0x08,
-        FRAME_TYPE_START_SCAN_ACK = 0x09,
+        FRAME_TYPE_LIDAR            = 0x01,
+        FRAME_TYPE_IMU              = 0x02,
+        FRAME_TYPE_ENC              = 0x03,
+        FRAME_TYPE_INITIALIZING     = 0x04,
+        FRAME_TYPE_DEVICE_INFO      = 0x05,
+        FRAME_TYPE_HEALTH_STATUS    = 0x06,
+        FRAME_TYPE_READY            = 0x07,
+        FRAME_TYPE_STARTUP_FAILED   = 0x08,
+        FRAME_TYPE_START_SCAN_ACK   = 0x09,
+        FRAME_TYPE_TIME_SYNC_REPORT = 0x0A,
 } FrameType;
 
 typedef enum
@@ -26,6 +27,7 @@ typedef enum
         // HOST_COMMAND_GET_STATUS,
         HOST_COMMAND_START_SCAN,
         // HOST_COMMAND_END_SCAN,
+        HOST_COMMAND_TIME_SYNC_REPORT,
         HOST_COMMAND_COUNT,
 } HostCommand;
 

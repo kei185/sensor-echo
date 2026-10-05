@@ -43,6 +43,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/arbiter.c
     src/startup.c
     src/protocol.c
+    src/time_sync.c
     src/lidar/parser/meta.c
     src/lidar/parser/health.c
     src/lidar/parser/device_info.c

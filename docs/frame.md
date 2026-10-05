@@ -42,6 +42,11 @@ Each command is exactly two bytes and has no terminator.
 | Command | Code |
 |---|---|
 | Start scan | `0xAA 0xA2` |
+| Report the latest time-sync measurement | `0xAA 0xA4` |
+
+`0xAA 0xA4` is reserved for the time-sync prototype. The command asks the
+controller to report its latest completed measurement. The command receiver
+and repeated sampling flow will be connected in the next time-sync step.
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
@@ -55,6 +60,7 @@ Each command is exactly two bytes and has no terminator.
 |0xAA55|-|-| 0x07  Ready |-| `READY` |
 |0xAA55|-|-| 0x08  Startup failed |-| `STARTUP FAILED` |
 |0xAA55|-|-| 0x09  Start scan acknowledged |-| `START SCAN ACK` |
+|0xAA55|-|-| 0x0A  Time-sync report |-| Time-sync measurement message |
 
 The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
@@ -77,6 +83,19 @@ after the 10-byte TX header. The header payload length marks the message end.
 | `0x07` | Startup completes | `READY` |
 | `0x08` | Startup fails | `STARTUP FAILED` |
 | `0x09` | Host start command accepted | `START SCAN ACK` |
+| `0x0A` | Time-sync measurement completed | Time-sync measurement message |
+
+A time-sync report contains one ASCII payload without a line terminator:
+
+```text
+TIME SYNC: req_tick=N ms | res_tick=N ms | round_trip=N ms | unix_time=N
+```
+
+`req_tick` is the controller tick when it requests the Unix time. `res_tick` is
+the controller tick when the host response arrives. Unsigned subtraction gives
+`round_trip = res_tick - req_tick`, including across one tick-counter wrap.
+`unix_time` is the unmodified value received from the host. Its wire encoding
+will be defined together with the Unix-time response command.
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw
