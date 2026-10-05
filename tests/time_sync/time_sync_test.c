@@ -4,120 +4,104 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "lidar/core.h"
 #include "time_sync.h"
 #include "tx/frame.h"
 
-static TxBufSlot tx_slot;
-static bool      slot_available;
-static uint32_t  queued_length;
-static uint32_t  dispatch_calls;
-
-static void reset_test_state(void)
-{
-        memset(&tx_slot, 0, sizeof(tx_slot));
-        slot_available = true;
-        queued_length  = 0u;
-        dispatch_calls = 0u;
-}
-
-uint32_t HAL_GetTick(void) { return 0x12345678u; }
-
-TxBufSlot* get_empty_buf(void) { return slot_available ? &tx_slot : NULL; }
-
-void push_full_slot(TxBufSlot* slot, uint32_t length)
-{
-        assert(slot == &tx_slot);
-        slot->length  = length;
-        slot->full    = true;
-        queued_length = length;
-}
-
-void try_dispatch_tx(void) { ++dispatch_calls; }
-
-static void report_queues_a_readable_host_frame(void)
+static void unix_time_is_decoded_from_little_endian_bytes(void)
 {
         // 準備
-        reset_test_state();
-        const TimeSyncMeasurement measurement = {
-                .req_time = 1000u,
-                .res_time = 1008u,
-                .unixtime = UINT64_C(1791160123),
+        const uint8_t encoded[TIME_SYNC_UNIX_TIME_SIZE] = {
+                0x08u,
+                0x07u,
+                0x06u,
+                0x05u,
+                0x04u,
+                0x03u,
+                0x02u,
+                0x01u,
         };
-        const char expected_payload[] =
-                "TIME SYNC: req_tick=1000 ms | res_tick=1008 ms | "
-                "round_trip=8 ms | unix_time=1791160123";
+        uint64_t unixtime = 0u;
 
         // 実行
-        bool reported = report_time_sync_measurement(&measurement);
+        bool decoded = time_sync_decode_unix_time(encoded, sizeof(encoded), &unixtime);
 
         // 検証
-        assert(reported);
-        assert(tx_slot.full);
-        assert(dispatch_calls == 1u);
-        assert(queued_length == TX_FRAME_HEADER_SIZE + strlen(expected_payload));
-        assert(tx_slot._buf[0] == START_OF_FRAME[0]);
-        assert(tx_slot._buf[1] == START_OF_FRAME[1]);
-        assert(tx_slot._buf[5] == FRAME_TYPE_TIME_SYNC_REPORT);
-        assert(tx_slot._buf[6] == 0x78u);
-        assert(tx_slot._buf[7] == 0x56u);
-        assert(tx_slot._buf[8] == 0x34u);
-        assert(tx_slot._buf[9] == 0x12u);
-        assert(memcmp(tx_slot._buf + TX_FRAME_HEADER_SIZE,
-                      expected_payload,
-                      strlen(expected_payload)) == 0);
+        assert(decoded);
+        assert(unixtime == UINT64_C(0x0102030405060708));
 }
 
-static void report_rejects_missing_input_or_tx_slot(void)
+static void session_records_exactly_five_measurements(void)
 {
         // 準備
-        reset_test_state();
-        const TimeSyncMeasurement measurement = {0};
+        TimeSyncSession session = {0};
 
-        // 実行・検証: 計測値がなければqueueへ触らない。
-        assert(!report_time_sync_measurement(NULL));
-        assert(dispatch_calls == 0u);
+        // 実行・検証
+        for (uint8_t i = 0u; i < TIME_SYNC_SAMPLE_COUNT; ++i) {
+                assert(time_sync_record(
+                        &session,
+                        (uint32_t)(1000u + i * 10u),
+                        (uint32_t)(1004u + i * 10u),
+                        UINT64_C(1791160123000) + i));
+        }
+        assert(session.count == TIME_SYNC_SAMPLE_COUNT);
+        assert(!time_sync_record(&session, 2000u, 2001u, UINT64_C(1791160124000)));
+}
 
+static void report_formats_all_five_measurements(void)
+{
         // 準備
-        slot_available = false;
+        TimeSyncSession session = {0};
+        for (uint8_t i = 0u; i < TIME_SYNC_SAMPLE_COUNT; ++i) {
+                assert(time_sync_record(
+                        &session,
+                        (uint32_t)(1000u + i * 10u),
+                        (uint32_t)(1004u + i * 10u),
+                        UINT64_C(1791160123000) + i));
+        }
+        char report[1024];
 
-        // 実行・検証: 空きslotがなければ送信を開始しない。
-        assert(!report_time_sync_measurement(&measurement));
-        assert(dispatch_calls == 0u);
+        // 実行
+        size_t length = time_sync_format_report(report, sizeof(report), &session);
+
+        // 検証
+        assert(length == strlen(report));
+        const char expected_prefix[] = "TIME SYNC: samples=5 | #1";
+        assert(strncmp(report, expected_prefix, strlen(expected_prefix)) == 0);
+        assert(strstr(report, "#1 req_tick=1000 ms res_tick=1004 ms round_trip=4 ms") !=
+               NULL);
+        assert(strstr(report,
+                      "#5 req_tick=1040 ms res_tick=1044 ms round_trip=4 ms "
+                      "unix_time=1791160123004 ms") != NULL);
 }
 
 static void report_calculates_round_trip_across_tick_wrap(void)
 {
         // 準備
-        reset_test_state();
-        const TimeSyncMeasurement measurement = {
-                .req_time = UINT32_MAX - 2u,
-                .res_time = 3u,
-                .unixtime = UINT64_C(1791160123),
-        };
-        const char expected_round_trip[] = "round_trip=6 ms";
+        TimeSyncSession session = {0};
+        assert(time_sync_record(&session, UINT32_MAX - 2u, 3u, UINT64_C(1791160123000)));
+        char report[256];
 
         // 実行
-        bool reported = report_time_sync_measurement(&measurement);
+        size_t length = time_sync_format_report(report, sizeof(report), &session);
 
         // 検証: unsigned tick差分なら1回のwrapをまたいでも経過時間を得られる。
-        assert(reported);
-        assert(strstr((char*)tx_slot._buf + TX_FRAME_HEADER_SIZE, expected_round_trip) !=
-               NULL);
+        assert(length > 0u);
+        assert(strstr(report, "round_trip=6 ms") != NULL);
 }
 
-static void time_sync_request_command_has_the_documented_bytes(void)
+static void time_sync_start_command_has_the_documented_bytes(void)
 {
         // 検証
-        assert(TIME_SYNC_REQUEST_COMMAND[0] == 0xAAu);
-        assert(TIME_SYNC_REQUEST_COMMAND[1] == 0xA4u);
+        assert(HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START][0] == 0xAAu);
+        assert(HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START][1] == 0xA4u);
 }
 
 int main(void)
 {
-        report_queues_a_readable_host_frame();
-        report_rejects_missing_input_or_tx_slot();
+        unix_time_is_decoded_from_little_endian_bytes();
+        session_records_exactly_five_measurements();
+        report_formats_all_five_measurements();
         report_calculates_round_trip_across_tick_wrap();
-        time_sync_request_command_has_the_documented_bytes();
+        time_sync_start_command_has_the_documented_bytes();
         return 0;
 }

@@ -2,27 +2,37 @@
 #define TIME_SYNC_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-#define TIME_SYNC_COMMAND_SIZE 2u
-
-/** Two-byte command sent by the controller to request Unix time from the host. */
-extern const uint8_t TIME_SYNC_REQUEST_COMMAND[TIME_SYNC_COMMAND_SIZE];
+#define TIME_SYNC_SAMPLE_COUNT   5u
+#define TIME_SYNC_UNIX_TIME_SIZE 8u
 
 typedef struct
 {
-        uint32_t req_time; // HAL tick when the controller requests Unix time.
-        uint32_t res_time; // HAL tick when the host response arrives.
-        uint64_t unixtime; // Unmodified Unix-time value supplied by the host.
+        uint32_t req_time; // HAL tick before the controller sends the start ACK.
+        uint32_t res_time; // HAL tick immediately after the Unix time arrives.
+        uint64_t unixtime; // Unix time in milliseconds, supplied by the host.
 } TimeSyncMeasurement;
 
-/**
- * Queue one human-readable time-sync measurement for UART2 transmission.
- *
- * The function returns after the frame is queued. UART2 DMA may still be
- * transmitting this frame or an older frame. Call this from the main context;
- * the TX queue has one writer.
- */
-bool report_time_sync_measurement(const TimeSyncMeasurement* measurement);
+typedef struct
+{
+        TimeSyncMeasurement samples[TIME_SYNC_SAMPLE_COUNT];
+        uint8_t             count;
+} TimeSyncSession;
+
+/** Decode one little-endian 64-bit Unix time received from the host. */
+bool time_sync_decode_unix_time(
+        const uint8_t* encoded, size_t encoded_size, uint64_t* unixtime);
+
+/** Add one completed measurement. Returns false when the session is full. */
+bool time_sync_record(
+        TimeSyncSession* session,
+        uint32_t         req_time,
+        uint32_t         res_time,
+        uint64_t         unixtime);
+
+/** Format all recorded measurements as one host-frame ASCII payload. */
+size_t time_sync_format_report(char* to, size_t capacity, const TimeSyncSession* session);
 
 #endif /* TIME_SYNC_H */

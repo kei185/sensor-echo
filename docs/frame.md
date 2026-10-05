@@ -18,6 +18,15 @@ sequenceDiagram
     LiDAR-->>Controller: Health status response
     Controller->>Host: Health status system frame
     Controller->>Host: READY system frame
+    opt Time synchronization
+        loop Five samples
+            Host->>Controller: Time sync start command AA A4
+            Controller->>Host: TIME SYNC START ACK system frame
+            Host->>Controller: Unix time in milliseconds, 8-byte little-endian
+            Controller->>Host: TIME ACK system frame
+        end
+        Controller->>Host: Time-sync report system frame
+    end
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
@@ -42,17 +51,18 @@ Each command is exactly two bytes and has no terminator.
 | Command | Code |
 |---|---|
 | Start scan | `0xAA 0xA2` |
+| Start one time-sync measurement | `0xAA 0xA4` |
 
-## Controller-to-Host Commands
+After `0xAA 0xA4`, the controller records `req_tick` and replies with
+`TIME SYNC START ACK`. The host then sends an unsigned 64-bit Unix timestamp in
+milliseconds as exactly 8 little-endian bytes. This timestamp has no command
+prefix. The controller records `res_tick` as soon as all 8 bytes arrive and
+replies with `TIME ACK`.
 
-| Command | Code |
-|---|---|
-| Request Unix time | `0xAA 0xA4` |
-
-The controller records `req_tick` and sends `0xAA 0xA4`. The host returns its
-Unix time, and the controller records `res_tick` when that response arrives.
-The Unix-time response encoding and repeated sampling flow will be connected in
-the next time-sync step.
+The host repeats this four-message exchange five times. After the fifth
+measurement, the controller sends one time-sync report containing all five
+samples. Starting a scan before five samples are collected ends the startup
+command loop without a partial report.
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
@@ -66,7 +76,9 @@ the next time-sync step.
 |0xAA55|-|-| 0x07  Ready |-| `READY` |
 |0xAA55|-|-| 0x08  Startup failed |-| `STARTUP FAILED` |
 |0xAA55|-|-| 0x09  Start scan acknowledged |-| `START SCAN ACK` |
-|0xAA55|-|-| 0x0A  Time-sync report |-| Time-sync measurement message |
+|0xAA55|-|-| 0x0A  Time-sync start acknowledged |-| `TIME SYNC START ACK` |
+|0xAA55|-|-| 0x0B  Time acknowledged |-| `TIME ACK` |
+|0xAA55|-|-| 0x0C  Time-sync report |-| Five time-sync measurements |
 
 The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
@@ -89,19 +101,20 @@ after the 10-byte TX header. The header payload length marks the message end.
 | `0x07` | Startup completes | `READY` |
 | `0x08` | Startup fails | `STARTUP FAILED` |
 | `0x09` | Host start command accepted | `START SCAN ACK` |
-| `0x0A` | Time-sync measurement completed | Time-sync measurement message |
+| `0x0A` | Time-sync start command accepted | `TIME SYNC START ACK` |
+| `0x0B` | One Unix-time sample accepted | `TIME ACK` |
+| `0x0C` | Five time-sync samples completed | Time-sync measurement report |
 
 A time-sync report contains one ASCII payload without a line terminator:
 
 ```text
-TIME SYNC: req_tick=N ms | res_tick=N ms | round_trip=N ms | unix_time=N
+TIME SYNC: samples=5 | #1 req_tick=N ms res_tick=N ms round_trip=N ms unix_time=N ms | ... | #5 req_tick=N ms res_tick=N ms round_trip=N ms unix_time=N ms
 ```
 
-`req_tick` is the controller tick when it requests the Unix time. `res_tick` is
-the controller tick when the host response arrives. Unsigned subtraction gives
-`round_trip = res_tick - req_tick`, including across one tick-counter wrap.
-`unix_time` is the unmodified value received from the host. Its wire encoding
-will be defined together with the Unix-time response command.
+`req_tick` is captured before the controller sends `TIME SYNC START ACK`.
+`res_tick` is captured immediately after the 8-byte Unix time arrives. Unsigned
+subtraction gives `round_trip = res_tick - req_tick`, including across one
+tick-counter wrap. `unix_time` is the millisecond value received from the host.
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw

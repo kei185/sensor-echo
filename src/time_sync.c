@@ -1,56 +1,71 @@
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "main.h"
-
-#include "arbiter.h"
-#include "lidar/core.h"
 #include "time_sync.h"
-#include "tx/frame.h"
-#include "tx/header.h"
 
-const uint8_t TIME_SYNC_REQUEST_COMMAND[TIME_SYNC_COMMAND_SIZE] = {0xAA, 0xA4};
-
-static const char TIME_SYNC_REPORT_FORMAT[] =
-        "TIME SYNC: req_tick=%" PRIu32 " ms | res_tick=%" PRIu32
-        " ms | round_trip=%" PRIu32 " ms | unix_time=%" PRIu64;
-
-bool report_time_sync_measurement(const TimeSyncMeasurement* measurement)
+bool time_sync_decode_unix_time(
+        const uint8_t* encoded, size_t encoded_size, uint64_t* unixtime)
 {
-        if (measurement == NULL)
+        if (encoded == NULL || encoded_size != TIME_SYNC_UNIX_TIME_SIZE ||
+            unixtime == NULL)
                 return false;
 
-        TxBufSlot* slot = get_empty_buf();
-        if (slot == NULL)
-                return false;
+        uint64_t decoded = 0u;
+        for (size_t i = 0u; i < TIME_SYNC_UNIX_TIME_SIZE; ++i)
+                decoded |= (uint64_t)encoded[i] << (i * 8u);
 
-        char*          payload    = (char*)(slot->_buf + TX_FRAME_HEADER_SIZE);
-        const size_t   capacity   = CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE;
-        const uint32_t round_trip = measurement->res_time - measurement->req_time;
-
-        int written = snprintf(
-                payload,
-                capacity,
-                TIME_SYNC_REPORT_FORMAT,
-                measurement->req_time,
-                measurement->res_time,
-                round_trip,
-                measurement->unixtime);
-        if (written < 0 || (size_t)written >= capacity)
-                return false;
-
-        size_t frame_length = tx_frame_write_header(
-                slot->_buf,
-                CORE_TX_BUF_SIZE,
-                (uint16_t)written,
-                FRAME_TYPE_TIME_SYNC_REPORT,
-                HAL_GetTick());
-        if (frame_length == 0u)
-                return false;
-
-        push_full_slot(slot, (uint32_t)frame_length);
-        try_dispatch_tx();
+        *unixtime = decoded;
         return true;
+}
+
+bool time_sync_record(
+        TimeSyncSession* session, uint32_t req_time, uint32_t res_time, uint64_t unixtime)
+{
+        if (session == NULL || session->count >= TIME_SYNC_SAMPLE_COUNT)
+                return false;
+
+        session->samples[session->count++] = (TimeSyncMeasurement){
+                .req_time = req_time,
+                .res_time = res_time,
+                .unixtime = unixtime,
+        };
+        return true;
+}
+
+size_t time_sync_format_report(char* to, size_t capacity, const TimeSyncSession* session)
+{
+        if (to == NULL || capacity == 0u || session == NULL || session->count == 0u ||
+            session->count > TIME_SYNC_SAMPLE_COUNT)
+                return 0u;
+
+        int written =
+                snprintf(to, capacity, "TIME SYNC: samples=%u", (unsigned)session->count);
+        if (written < 0 || (size_t)written >= capacity)
+                return 0u;
+
+        size_t used = (size_t)written;
+        for (uint8_t i = 0u; i < session->count; ++i) {
+                const TimeSyncMeasurement* sample = &session->samples[i];
+                const uint32_t round_trip         = sample->res_time - sample->req_time;
+
+                written = snprintf(
+                        to + used,
+                        capacity - used,
+                        " | #%u req_tick=%" PRIu32 " ms res_tick=%" PRIu32
+                        " ms round_trip=%" PRIu32 " ms unix_time=%" PRIu64 " ms",
+                        (unsigned)(i + 1u),
+                        sample->req_time,
+                        sample->res_time,
+                        round_trip,
+                        sample->unixtime);
+                if (written < 0 || (size_t)written >= capacity - used)
+                        return 0u;
+
+                used += (size_t)written;
+        }
+
+        return used;
 }

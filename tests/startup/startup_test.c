@@ -6,6 +6,7 @@
 
 #include "main.h"
 #include "startup.h"
+#include "time_sync.h"
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "tx/frame.h"
@@ -26,16 +27,23 @@ typedef enum
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
         EVENT_HOST_START_SCAN_ACK,
+        EVENT_HOST_TIME_SYNC_START_ACK,
+        EVENT_HOST_TIME_ACK,
+        EVENT_HOST_TIME_SYNC_REPORT,
         EVENT_FAILURE_PIN_SET,
         EVENT_HOST_FAILURE,
 } Event;
 
-#define EVENT_CAPACITY 16u
+#define EVENT_CAPACITY 32u
 
 static Event     events[EVENT_CAPACITY];
 static size_t    event_count;
 static uint32_t  lidar_receive_count;
 static uint32_t  host_receive_count;
+static uint32_t  host_command_receive_count;
+static uint32_t  unix_time_receive_count;
+static uint32_t  fake_tick;
+static bool      time_sync_enabled;
 static bool      malformed_health_reply;
 static TxBufSlot startup_slot;
 static uint8_t   rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
@@ -60,13 +68,25 @@ payload_equals(const uint8_t* frame, uint16_t frame_length, const char* message)
                memcmp(frame + TX_FRAME_HEADER_SIZE, message, message_length) == 0;
 }
 
+static bool
+payload_starts_with(const uint8_t* frame, uint16_t frame_length, const char* prefix)
+{
+        size_t prefix_length = strlen(prefix);
+        return frame_length >= TX_FRAME_HEADER_SIZE + prefix_length &&
+               memcmp(frame + TX_FRAME_HEADER_SIZE, prefix, prefix_length) == 0;
+}
+
 static void reset_test_state(void)
 {
         memset(events, 0, sizeof(events));
-        event_count            = 0u;
-        lidar_receive_count    = 0u;
-        host_receive_count     = 0u;
-        malformed_health_reply = false;
+        event_count                = 0u;
+        lidar_receive_count        = 0u;
+        host_receive_count         = 0u;
+        host_command_receive_count = 0u;
+        unix_time_receive_count    = 0u;
+        fake_tick                  = 1000u;
+        time_sync_enabled          = false;
+        malformed_health_reply     = false;
         memset(&startup_slot, 0, sizeof(startup_slot));
         memset(rx_storage, 0, sizeof(rx_storage));
 }
@@ -116,6 +136,17 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         } else if (payload_equals(data, length, "START SCAN ACK")) {
                 assert(data[5] == FRAME_TYPE_START_SCAN_ACK);
                 record_event(EVENT_HOST_START_SCAN_ACK);
+        } else if (payload_equals(data, length, "TIME SYNC START ACK")) {
+                assert(data[5] == FRAME_TYPE_TIME_SYNC_START_ACK);
+                record_event(EVENT_HOST_TIME_SYNC_START_ACK);
+        } else if (payload_equals(data, length, "TIME ACK")) {
+                assert(data[5] == FRAME_TYPE_TIME_ACK);
+                record_event(EVENT_HOST_TIME_ACK);
+        } else if (length > TX_FRAME_HEADER_SIZE &&
+                   data[5] == FRAME_TYPE_TIME_SYNC_REPORT) {
+                assert(payload_starts_with(data, length, "TIME SYNC: samples=5"));
+                assert(payload_starts_with(data, length, "TIME SYNC: samples=5 | #1"));
+                record_event(EVENT_HOST_TIME_SYNC_REPORT);
         } else {
                 assert(length == 1u);
                 if (data[0] == SYS_TYPE_CODE_DEVICE_INFO)
@@ -151,9 +182,30 @@ HAL_StatusTypeDef HAL_UART_Receive(
         }
 
         assert(huart == &huart2);
-        assert(length == HOST_COMMAND_SIZE);
         assert(timeout == HAL_MAX_DELAY);
-        if (host_receive_count++ == 0u) {
+
+        ++host_receive_count;
+        if (time_sync_enabled) {
+                if (length == HOST_COMMAND_SIZE) {
+                        const uint8_t* command =
+                                host_command_receive_count < TIME_SYNC_SAMPLE_COUNT
+                                        ? HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START]
+                                        : HOST_COMMANDS[HOST_COMMAND_START_SCAN];
+                        memcpy(data, command, HOST_COMMAND_SIZE);
+                        ++host_command_receive_count;
+                        return HAL_OK;
+                }
+
+                assert(length == TIME_SYNC_UNIX_TIME_SIZE);
+                uint64_t unixtime = UINT64_C(1791160123000) + unix_time_receive_count;
+                for (uint8_t i = 0u; i < TIME_SYNC_UNIX_TIME_SIZE; ++i)
+                        data[i] = (uint8_t)(unixtime >> (i * 8u));
+                ++unix_time_receive_count;
+                return HAL_OK;
+        }
+
+        assert(length == HOST_COMMAND_SIZE);
+        if (host_receive_count == 1u) {
                 // 未対応コマンドを無視して、次のstart scanを待つことを確認する。
                 const uint8_t unsupported_command[HOST_COMMAND_SIZE] = {0xAA, 0xA1};
                 memcpy(data, unsupported_command, HOST_COMMAND_SIZE);
@@ -163,7 +215,7 @@ HAL_StatusTypeDef HAL_UART_Receive(
         return HAL_OK;
 }
 
-uint32_t HAL_GetTick(void) { return 1234u; }
+uint32_t HAL_GetTick(void) { return fake_tick++; }
 
 TxBufSlot* get_empty_buf(void) { return &startup_slot; }
 
@@ -255,9 +307,47 @@ static void invalid_health_reply_stops_startup(void)
         assert(host_receive_count == 0u);
 }
 
+static void startup_reports_five_time_sync_measurements(void)
+{
+        // 準備: hostが5回の時刻同期を完了してからscan開始を要求する。
+        reset_test_state();
+        time_sync_enabled = true;
+
+        // 実行
+        assert(run_startup_sequence());
+
+        // 検証
+        const Event expected[] = {
+                EVENT_HOST_INITIALIZING,
+                EVENT_LIDAR_DEVICE_REQUEST,
+                EVENT_HOST_DEVICE_INFO,
+                EVENT_LIDAR_HEALTH_REQUEST,
+                EVENT_HOST_HEALTH_STATUS,
+                EVENT_HOST_READY,
+                EVENT_HOST_TIME_SYNC_START_ACK,
+                EVENT_HOST_TIME_ACK,
+                EVENT_HOST_TIME_SYNC_START_ACK,
+                EVENT_HOST_TIME_ACK,
+                EVENT_HOST_TIME_SYNC_START_ACK,
+                EVENT_HOST_TIME_ACK,
+                EVENT_HOST_TIME_SYNC_START_ACK,
+                EVENT_HOST_TIME_ACK,
+                EVENT_HOST_TIME_SYNC_START_ACK,
+                EVENT_HOST_TIME_ACK,
+                EVENT_HOST_TIME_SYNC_REPORT,
+                EVENT_HOST_START_SCAN_ACK,
+                EVENT_DMA_STARTED,
+        };
+        assert(event_count == sizeof(expected) / sizeof(expected[0]));
+        assert(memcmp(events, expected, sizeof(expected)) == 0);
+        assert(host_command_receive_count == TIME_SYNC_SAMPLE_COUNT + 1u);
+        assert(unix_time_receive_count == TIME_SYNC_SAMPLE_COUNT);
+}
+
 int main(void)
 {
         startup_follows_the_documented_order();
         invalid_health_reply_stops_startup();
+        startup_reports_five_time_sync_measurements();
         return 0;
 }
