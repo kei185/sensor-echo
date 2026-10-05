@@ -18,15 +18,6 @@ sequenceDiagram
     LiDAR-->>Controller: Health status response
     Controller->>Host: Health status system frame
     Controller->>Host: READY system frame
-    opt Time synchronization
-        loop Five samples
-            Host->>Controller: Time sync start command AA A4
-            Controller->>Host: TIME SYNC START ACK system frame
-            Host->>Controller: Unix time in milliseconds, 8-byte little-endian
-            Controller->>Host: TIME ACK system frame
-        end
-        Controller->>Host: Time-sync report system frame
-    end
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
@@ -46,12 +37,14 @@ If UART communication or reply validation fails, the controller sends a
 
 ## Host-to-Controller Commands
 
-Each command is exactly two bytes and has no terminator.
+These messages have no terminator. The controller accepts `Time` only after it
+has acknowledged `Time sync start`.
 
-| Command | Code |
-|---|---|
-| Start scan | `0xAA 0xA2` |
-| Start one time-sync measurement | `0xAA 0xA4` |
+| Message | Wire data | Size |
+|---|---|---:|
+| Start scan | `0xAA 0xA2` | 2 bytes |
+| Time sync start | `0xAA 0xA4` | 2 bytes |
+| Time | Unsigned 64-bit Unix time in milliseconds, little-endian | 8 bytes |
 
 After `0xAA 0xA4`, the controller records `req_tick` and replies with
 `TIME SYNC START ACK`. The host then sends an unsigned 64-bit Unix timestamp in
@@ -63,6 +56,27 @@ The host repeats this four-message exchange five times. After the fifth
 measurement, the controller sends one time-sync report containing all five
 samples. Starting a scan before five samples are collected ends the startup
 command loop without a partial report.
+
+## Time Synchronization
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host
+    participant Controller
+
+    loop Five measurements
+        Host->>Controller: Time sync start AA A4
+        Controller->>Controller: Record req_tick
+        Controller->>Host: TIME SYNC START ACK, type 0x0A
+        Host->>Controller: Time, 8-byte little-endian Unix milliseconds
+        Controller->>Controller: Record res_tick and store sample
+        Controller->>Host: TIME ACK, type 0x0B
+    end
+    Controller->>Host: Five-sample report, type 0x0C
+```
+
+The controller sends the report immediately after the fifth `TIME ACK`.
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 

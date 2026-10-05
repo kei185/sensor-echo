@@ -221,6 +221,7 @@ static bool measure_host_time(uint8_t* tx_frame, TimeSyncSession* time_sync_sess
         if (time_sync_session->count < TIME_SYNC_SAMPLE_COUNT)
                 return true;
 
+        // Continue directly from the fifth ACK to the complete session report.
         char*  payload        = (char*)(tx_frame + TX_FRAME_HEADER_SIZE);
         size_t payload_length = time_sync_format_report(
                 payload,
