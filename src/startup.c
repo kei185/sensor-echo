@@ -15,11 +15,6 @@
 
 #define STARTUP_UART_TIMEOUT_MS 100u
 
-static const char INITIALIZING_MESSAGE[]   = "INITIALIZING";
-static const char READY_MESSAGE[]          = "READY";
-static const char FAILURE_MESSAGE[]        = "STARTUP FAILED";
-static const char START_SCAN_ACK_MESSAGE[] = "START SCAN ACK";
-
 /**
  * @brief Build and send one system-message frame to the host.
  *
@@ -213,7 +208,7 @@ static bool fail_startup(uint8_t* tx_frame)
                 (void)send_host_system_message(
                         tx_frame,
                         FRAME_TYPE_STARTUP_FAILED,
-                        FAILURE_MESSAGE);
+                        FRAME_MESSAGE_STARTUP_FAILED);
         return false;
 }
 
@@ -241,7 +236,7 @@ bool run_startup_sequence(void)
         bool initializing_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_INITIALIZING,
-                INITIALIZING_MESSAGE);
+                FRAME_MESSAGE_INITIALIZING);
         if (!initializing_sent)
                 return fail_startup(tx_frame);
 
@@ -271,7 +266,7 @@ bool run_startup_sequence(void)
          * send ready
          */
         bool ready_sent =
-                send_host_system_message(tx_frame, FRAME_TYPE_READY, READY_MESSAGE);
+                send_host_system_message(tx_frame, FRAME_TYPE_READY, FRAME_MESSAGE_READY);
         if (!ready_sent)
                 return fail_startup(tx_frame);
 
@@ -288,7 +283,7 @@ bool run_startup_sequence(void)
         bool start_scan_ack_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_START_SCAN_ACK,
-                START_SCAN_ACK_MESSAGE);
+                FRAME_MESSAGE_START_SCAN_ACK);
         if (!start_scan_ack_sent)
                 return fail_startup(tx_frame);
 
