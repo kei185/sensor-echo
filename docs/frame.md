@@ -48,7 +48,7 @@ Each command is exactly two bytes and has no terminator.
 |---| ---|---|---|---|---|
 |0xAA55|-|-| 0x01  Lidar |-| point data| 
 |0xAA55|-|-| 0x02  IMU | -|kinematic data| 
-|0xAA55|-|-| 0x03  Encoder |-| odometry data| 
+|0xAA55|-|-| 0x03  Encoder |-| left and right wheel rotation data|
 |0xAA55|-|-| 0x04  Initializing |-| `INITIALIZING` |
 |0xAA55|-|-| 0x05  Device information |-| Device information message |
 |0xAA55|-|-| 0x06  Health status |-| Health status message |
@@ -122,8 +122,41 @@ The RX ring and TX queue design are described in [protocol.md](protocol.md).
 ### IMU Frame payload 
 TODO
 
-### Encoder Frame payload 
-TODO
+### Encoder Frame payload
+
+Size: 4 bytes per sample. The left wheel value comes first, followed by the
+right wheel value. Each value is a 16-bit Q6 wheel rotation count and uses the
+same little-endian byte order as the other multi-byte host-frame fields.
+
+| Payload offset | Field | Size | Format | Unit | Byte order |
+|---:|---|---:|---|---|---|
+| `0` | Left wheel rotation count | 2 bytes | 16-bit Q6 | rotations | little-endian |
+| `2` | Right wheel rotation count | 2 bytes | 16-bit Q6 | rotations | little-endian |
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+
+packet
++8: "left Q6 low byte"
++8: "left Q6 high byte"
++8: "right Q6 low byte"
++8: "right Q6 high byte"
+```
+
+Divide the encoded value by 64 to get the wheel rotation count:
+
+\[
+\text{wheel rotations} = \frac{\text{Q6 value}}{64}
+\]
+
+For example, left wheel `12.5` rotations and right wheel `7.25` rotations are
+encoded as `12.5 * 64 = 800 = 0x0320` and
+`7.25 * 64 = 464 = 0x01D0`:
+
+| Byte offset | `0` | `1` | `2` | `3` |
+|---:|---:|---:|---:|---:|
+| Wire byte | `20` | `03` | `D0` | `01` |
+| Field | left low | left high | right low | right high |
 
 ### CRC
 The CRC field uses the 8-bit `crc_8()` function from libcrc. For now, its input
