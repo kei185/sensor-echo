@@ -106,11 +106,11 @@ static void report_calculates_round_trip_across_tick_wrap(void)
                NULL);
 }
 
-static void time_sync_report_command_has_the_documented_bytes(void)
+static void time_sync_request_command_has_the_documented_bytes(void)
 {
         // 検証
-        assert(HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_REPORT][0] == 0xAAu);
-        assert(HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_REPORT][1] == 0xA4u);
+        assert(TIME_SYNC_REQUEST_COMMAND[0] == 0xAAu);
+        assert(TIME_SYNC_REQUEST_COMMAND[1] == 0xA4u);
 }
 
 int main(void)
@@ -118,6 +118,6 @@ int main(void)
         report_queues_a_readable_host_frame();
         report_rejects_missing_input_or_tx_slot();
         report_calculates_round_trip_across_tick_wrap();
-        time_sync_report_command_has_the_documented_bytes();
+        time_sync_request_command_has_the_documented_bytes();
         return 0;
 }

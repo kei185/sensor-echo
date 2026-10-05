@@ -4,6 +4,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define TIME_SYNC_COMMAND_SIZE 2u
+
+/** Two-byte command sent by the controller to request Unix time from the host. */
+extern const uint8_t TIME_SYNC_REQUEST_COMMAND[TIME_SYNC_COMMAND_SIZE];
+
 typedef struct
 {
         uint32_t req_time; // HAL tick when the controller requests Unix time.

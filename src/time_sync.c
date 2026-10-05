@@ -11,6 +11,8 @@
 #include "tx/frame.h"
 #include "tx/header.h"
 
+const uint8_t TIME_SYNC_REQUEST_COMMAND[TIME_SYNC_COMMAND_SIZE] = {0xAA, 0xA4};
+
 static const char TIME_SYNC_REPORT_FORMAT[] =
         "TIME SYNC: req_tick=%" PRIu32 " ms | res_tick=%" PRIu32
         " ms | round_trip=%" PRIu32 " ms | unix_time=%" PRIu64;

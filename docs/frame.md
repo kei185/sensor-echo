@@ -42,11 +42,17 @@ Each command is exactly two bytes and has no terminator.
 | Command | Code |
 |---|---|
 | Start scan | `0xAA 0xA2` |
-| Report the latest time-sync measurement | `0xAA 0xA4` |
 
-`0xAA 0xA4` is reserved for the time-sync prototype. The command asks the
-controller to report its latest completed measurement. The command receiver
-and repeated sampling flow will be connected in the next time-sync step.
+## Controller-to-Host Commands
+
+| Command | Code |
+|---|---|
+| Request Unix time | `0xAA 0xA4` |
+
+The controller records `req_tick` and sends `0xAA 0xA4`. The host returns its
+Unix time, and the controller records `res_tick` when that response arrives.
+The Unix-time response encoding and repeated sampling flow will be connected in
+the next time-sync step.
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
