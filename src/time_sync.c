@@ -18,9 +18,6 @@
 static bool
 send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
 {
-        if (tx_frame == NULL || payload_length > CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE)
-                return false;
-
         size_t frame_length = tx_frame_write_header(
                 tx_frame,
                 CORE_TX_BUF_SIZE,
@@ -38,15 +35,14 @@ send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
         return transmit_status == HAL_OK;
 }
 
-static bool
-send_host_message(uint8_t* tx_frame, FrameType frame_type, const char* message)
+static bool send_host_message(
+        uint8_t*    tx_frame,
+        FrameType   frame_type,
+        const char* message,
+        uint16_t    message_length)
 {
-        size_t payload_length = strlen(message);
-        if (payload_length > CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE)
-                return false;
-
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, payload_length);
-        return send_host_frame(tx_frame, frame_type, payload_length);
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, message_length);
+        return send_host_frame(tx_frame, frame_type, message_length);
 }
 
 bool time_sync_decode_unix_time(
@@ -122,7 +118,8 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
         if (!send_host_message(
                     tx_frame,
                     FRAME_TYPE_TIME_SYNC_START_ACK,
-                    FRAME_MESSAGE_TIME_SYNC_START_ACK))
+                    FRAME_MESSAGE_TIME_SYNC_START_ACK,
+                    sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u))
                 return false;
 
         uint8_t           time_frame[TIME_SYNC_TIME_FRAME_SIZE];
@@ -146,7 +143,11 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
             !time_sync_record(session, req_time, res_time, unixtime))
                 return false;
 
-        if (!send_host_message(tx_frame, FRAME_TYPE_TIME_ACK, FRAME_MESSAGE_TIME_ACK))
+        if (!send_host_message(
+                    tx_frame,
+                    FRAME_TYPE_TIME_ACK,
+                    FRAME_MESSAGE_TIME_ACK,
+                    sizeof(FRAME_MESSAGE_TIME_ACK) - 1u))
                 return false;
 
         if (session->count < TIME_SYNC_SAMPLE_COUNT)
