@@ -23,25 +23,24 @@
  *
  * @param tx_frame Writable TX slot used for the complete host frame.
  * @param frame_type System-message type written into the host frame header.
- * @param message NUL-terminated message written into the frame payload.
+ * @param message Fixed message written into the frame payload.
+ * @param message_length Compile-time length of message, excluding its NUL byte.
  * @return true when the complete frame was sent to the host.
  */
-static bool
-send_host_system_message(uint8_t* tx_frame, FrameType frame_type, const char* message)
+static bool send_host_system_message(
+        uint8_t*    tx_frame,
+        FrameType   frame_type,
+        const char* message,
+        uint16_t    message_length)
 {
-        const size_t payload_length = strlen(message);
-
-        if (payload_length > CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE)
-                return false;
-
         // write message into the frame
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, payload_length);
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, message_length);
 
         // write header into the frame
         size_t frame_length = tx_frame_write_header(
                 tx_frame,
                 CORE_TX_BUF_SIZE,
-                (uint16_t)payload_length,
+                message_length,
                 frame_type,
                 HAL_GetTick());
 
@@ -208,7 +207,8 @@ static bool fail_startup(uint8_t* tx_frame)
                 (void)send_host_system_message(
                         tx_frame,
                         FRAME_TYPE_STARTUP_FAILED,
-                        FRAME_MESSAGE_STARTUP_FAILED);
+                        FRAME_MESSAGE_STARTUP_FAILED,
+                        sizeof(FRAME_MESSAGE_STARTUP_FAILED) - 1u);
         return false;
 }
 
@@ -236,7 +236,8 @@ bool run_startup_sequence(void)
         bool initializing_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_INITIALIZING,
-                FRAME_MESSAGE_INITIALIZING);
+                FRAME_MESSAGE_INITIALIZING,
+                sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
         if (!initializing_sent)
                 return fail_startup(tx_frame);
 
@@ -265,8 +266,11 @@ bool run_startup_sequence(void)
         /**
          * send ready
          */
-        bool ready_sent =
-                send_host_system_message(tx_frame, FRAME_TYPE_READY, FRAME_MESSAGE_READY);
+        bool ready_sent = send_host_system_message(
+                tx_frame,
+                FRAME_TYPE_READY,
+                FRAME_MESSAGE_READY,
+                sizeof(FRAME_MESSAGE_READY) - 1u);
         if (!ready_sent)
                 return fail_startup(tx_frame);
 
@@ -283,7 +287,8 @@ bool run_startup_sequence(void)
         bool start_scan_ack_sent = send_host_system_message(
                 tx_frame,
                 FRAME_TYPE_START_SCAN_ACK,
-                FRAME_MESSAGE_START_SCAN_ACK);
+                FRAME_MESSAGE_START_SCAN_ACK,
+                sizeof(FRAME_MESSAGE_START_SCAN_ACK) - 1u);
         if (!start_scan_ack_sent)
                 return fail_startup(tx_frame);
 
