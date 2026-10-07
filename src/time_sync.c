@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "main.h"
 #include "stm32f4xx_hal_uart.h"
@@ -19,11 +20,11 @@
 #define TIME_SYNC_SEND_TIME_OFFSET (TIME_SYNC_ACK_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define TIME_SYNC_TIME_FRAME_SIZE  (TIME_SYNC_SEND_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define UINT64_DECIMAL_TEXT_SIZE   21u
-#define UNIX_MILLISECONDS_PER_DAY  UINT64_C(86400000)
 #define UNIX_MILLISECONDS_PER_SECOND UINT64_C(1000)
-#define UNIX_DAYS_TO_2000            UINT64_C(10957)
 #define RTC_MIN_UNIX_TIME_MS         UINT64_C(946684800000)
 #define RTC_MAX_UNIX_TIME_MS         UINT64_C(4102444800000)
+
+_Static_assert(sizeof(time_t) >= sizeof(int64_t), "64-bit time_t is required");
 
 typedef struct
 {
@@ -67,75 +68,36 @@ static void uint64_to_decimal(uint64_t value, char to[UINT64_DECIMAL_TEXT_SIZE])
         to[length] = '\0';
 }
 
-static bool is_leap_year(uint16_t year)
-{
-        return year % 4u == 0u && (year % 100u != 0u || year % 400u == 0u);
-}
-
-static uint8_t days_in_month(uint16_t year, uint8_t month)
-{
-        static const uint8_t DAYS[] = {
-                31u,
-                28u,
-                31u,
-                30u,
-                31u,
-                30u,
-                31u,
-                31u,
-                30u,
-                31u,
-                30u,
-                31u,
-        };
-
-        if (month == 2u && is_leap_year(year))
-                return 29u;
-        return DAYS[month - 1u];
-}
-
 static bool unix_time_to_rtc(uint64_t unix_time_ms, RtcCalendar* calendar)
 {
         if (calendar == NULL || unix_time_ms < RTC_MIN_UNIX_TIME_MS ||
             unix_time_ms >= RTC_MAX_UNIX_TIME_MS)
                 return false;
 
-        uint64_t days_since_epoch    = unix_time_ms / UNIX_MILLISECONDS_PER_DAY;
-        uint64_t milliseconds_of_day = unix_time_ms % UNIX_MILLISECONDS_PER_DAY;
-        uint64_t days                = days_since_epoch - UNIX_DAYS_TO_2000;
-        uint16_t year                = 2000u;
+        time_t     unix_seconds = (time_t)(unix_time_ms / UNIX_MILLISECONDS_PER_SECOND);
+        struct tm* utc          = gmtime(&unix_seconds);
+        if (utc == NULL)
+                return false;
 
-        while (days >= (is_leap_year(year) ? 366u : 365u)) {
-                days -= is_leap_year(year) ? 366u : 365u;
-                ++year;
-        }
-
-        uint8_t month = 1u;
-        while (days >= days_in_month(year, month)) {
-                days -= days_in_month(year, month);
-                ++month;
-        }
-
-        uint32_t seconds_of_day =
-                (uint32_t)(milliseconds_of_day / UNIX_MILLISECONDS_PER_SECOND);
         *calendar = (RtcCalendar){
                 .date =
                         {
-                                // 1970-01-01 was Thursday; HAL numbers Monday as 1.
-                                .WeekDay = (uint8_t)((days_since_epoch + 3u) % 7u + 1u),
-                                .Month   = month,
-                                .Date    = (uint8_t)(days + 1u),
-                                .Year    = (uint8_t)(year - 2000u),
+                                // struct tm uses Sunday=0; HAL uses Sunday=7.
+                                .WeekDay =
+                                        (uint8_t)(utc->tm_wday == 0 ? 7 : utc->tm_wday),
+                                .Month = (uint8_t)(utc->tm_mon + 1),
+                                .Date  = (uint8_t)utc->tm_mday,
+                                .Year  = (uint8_t)(utc->tm_year - 100),
                         },
                 .time =
                         {
-                                .Hours          = (uint8_t)(seconds_of_day / 3600u),
-                                .Minutes        = (uint8_t)((seconds_of_day / 60u) % 60u),
-                                .Seconds        = (uint8_t)(seconds_of_day % 60u),
+                                .Hours          = (uint8_t)utc->tm_hour,
+                                .Minutes        = (uint8_t)utc->tm_min,
+                                .Seconds        = (uint8_t)utc->tm_sec,
                                 .DayLightSaving = RTC_DAYLIGHTSAVING_NONE,
                                 .StoreOperation = RTC_STOREOPERATION_RESET,
                         },
-                .millisecond = (uint16_t)(milliseconds_of_day % 1000u),
+                .millisecond = (uint16_t)(unix_time_ms % UNIX_MILLISECONDS_PER_SECOND),
         };
         return true;
 }
