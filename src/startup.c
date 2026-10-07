@@ -275,16 +275,14 @@ bool run_startup_sequence(void)
         if (!ready_sent)
                 return fail_startup(tx_frame);
 
-        TimeSyncSession session = {0};
-        for (int i = 0; i < TIME_SYNC_SAMPLE_COUNT; i++) {
-                uint8_t* tx_frame = get_empty_buf()->_buf;
-                if (!time_sync_handle_start(tx_frame, &session))
-                        Error_Handler();
-
-                if (i == TIME_SYNC_SAMPLE_COUNT - 1)
-                        if (!time_sync_send_report_if_ready(tx_frame, &session))
-                                Error_Handler();
-        }
+        TimeSyncSession session         = {0};
+        uint8_t*        time_sync_frame = get_empty_buf()->_buf;
+        if (!time_sync_handle_start(time_sync_frame, &session))
+                Error_Handler();
+        if (!time_sync_set_rtc(&session))
+                Error_Handler();
+        if (!time_sync_send_report_if_ready(time_sync_frame, &session))
+                Error_Handler();
 
         /**
          * wait for start command from the host
