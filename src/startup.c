@@ -212,6 +212,7 @@ static bool fail_startup(uint8_t* tx_frame)
         return false;
 }
 
+#include "time_sync.h"
 /**
  * @brief Complete the blocking handshake and start continuous LiDAR reception.
  *
@@ -230,38 +231,38 @@ bool run_startup_sequence(void)
                 return fail_startup(NULL);
         uint8_t* tx_frame = tx_slot->_buf;
 
-        /**
-         * send initializing message
-         */
-        bool initializing_sent = send_host_system_message(
-                tx_frame,
-                FRAME_TYPE_INITIALIZING,
-                FRAME_MESSAGE_INITIALIZING,
-                sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
-        if (!initializing_sent)
-                return fail_startup(tx_frame);
+        // /**
+        //  * send initializing message
+        //  */
+        // bool initializing_sent = send_host_system_message(
+        //         tx_frame,
+        //         FRAME_TYPE_INITIALIZING,
+        //         FRAME_MESSAGE_INITIALIZING,
+        //         sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
+        // if (!initializing_sent)
+        //         return fail_startup(tx_frame);
 
-        /**
-         * forward device info
-         */
-        bool device_info_forwarded = request_and_forward_lidar_message(
-                tx_frame,
-                MSG_TYPE_RX_SYS_INFO,
-                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
-                SYS_TYPE_CODE_DEVICE_INFO);
-        if (!device_info_forwarded)
-                return fail_startup(tx_frame);
+        // /**
+        //  * forward device info
+        //  */
+        // bool device_info_forwarded = request_and_forward_lidar_message(
+        //         tx_frame,
+        //         MSG_TYPE_RX_SYS_INFO,
+        //         SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
+        //         SYS_TYPE_CODE_DEVICE_INFO);
+        // if (!device_info_forwarded)
+        //         return fail_startup(tx_frame);
 
-        /**
-         * forward health
-         */
-        bool health_status_forwarded = request_and_forward_lidar_message(
-                tx_frame,
-                MSG_TYPE_RX_HEALTH,
-                SYS_PACKET_HEALTH_CONTENT_SIZE,
-                SYS_TYPE_CODE_HEALTH);
-        if (!health_status_forwarded)
-                return fail_startup(tx_frame);
+        // /**
+        //  * forward health
+        //  */
+        // bool health_status_forwarded = request_and_forward_lidar_message(
+        //         tx_frame,
+        //         MSG_TYPE_RX_HEALTH,
+        //         SYS_PACKET_HEALTH_CONTENT_SIZE,
+        //         SYS_TYPE_CODE_HEALTH);
+        // if (!health_status_forwarded)
+        //         return fail_startup(tx_frame);
 
         /**
          * send ready
@@ -273,6 +274,17 @@ bool run_startup_sequence(void)
                 sizeof(FRAME_MESSAGE_READY) - 1u);
         if (!ready_sent)
                 return fail_startup(tx_frame);
+
+        TimeSyncSession session = {0};
+        for (int i = 0; i < TIME_SYNC_SAMPLE_COUNT; i++) {
+                uint8_t* tx_frame = get_empty_buf()->_buf;
+                if (!time_sync_handle_start(tx_frame, &session))
+                        Error_Handler();
+
+                if (i == TIME_SYNC_SAMPLE_COUNT - 1)
+                        if (!time_sync_send_report_if_ready(tx_frame, &session))
+                                Error_Handler();
+        }
 
         /**
          * wait for start command from the host

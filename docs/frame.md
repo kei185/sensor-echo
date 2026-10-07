@@ -44,13 +44,22 @@ has acknowledged `Time sync start`.
 |---|---|---:|
 | Start scan | `0xAA 0xA2` | 2 bytes |
 | Time sync start | `0xAA 0xA4` | 2 bytes |
-| Time | `0xAA 0xA5` followed by unsigned 64-bit Unix time in milliseconds, little-endian | 10 bytes |
+| Time | `0xAA 0xA5`, ACK receive time, and Time send time | 18 bytes |
 
 After `0xAA 0xA4`, the controller records `req_tick` and replies with
-`TIME SYNC START ACK`. The host then sends an unsigned 64-bit Unix timestamp in
-milliseconds after the two-byte `0xAA 0xA5` command. The controller records
-`res_tick` as soon as the complete 10-byte frame arrives, verifies the command,
-and replies with `TIME ACK`.
+`TIME SYNC START ACK`. The host records `ack_time` when it receives that ACK.
+Immediately before sending the Time frame, the host records `send_time`. Both
+values are unsigned 64-bit Unix timestamps in milliseconds. The controller
+records `res_tick` as soon as the complete 18-byte frame arrives, verifies the
+command, and replies with `TIME ACK`.
+
+The Time frame uses this byte layout:
+
+| Byte offset | Size | Field | Format |
+|---:|---:|---|---|
+| `0` | 2 bytes | Command | `0xAA 0xA5` |
+| `2` | 8 bytes | `ack_time` | Unsigned 64-bit Unix milliseconds, little-endian |
+| `10` | 8 bytes | `send_time` | Unsigned 64-bit Unix milliseconds, little-endian |
 
 The host repeats this four-message exchange five times. After the fifth
 measurement, the controller sends one time-sync report containing all five
@@ -69,7 +78,9 @@ sequenceDiagram
         Host->>Controller: Time sync start AA A4
         Controller->>Controller: Record req_tick
         Controller->>Host: TIME SYNC START ACK, type 0x0A
-        Host->>Controller: Time AA A5 plus 8-byte little-endian Unix milliseconds
+        Host->>Host: Record ack_time when ACK arrives
+        Host->>Host: Record send_time before sending Time
+        Host->>Controller: Time AA A5 plus ack_time and send_time
         Controller->>Controller: Record res_tick and store sample
         Controller->>Host: TIME ACK, type 0x0B
     end
@@ -119,16 +130,21 @@ after the 10-byte TX header. The header payload length marks the message end.
 | `0x0B` | One Unix-time sample accepted | `TIME ACK` |
 | `0x0C` | Five time-sync samples completed | Time-sync measurement report |
 
-A time-sync report contains one ASCII payload without a line terminator:
+A time-sync report is one ASCII payload. Each sample ends with `\r\n`:
 
 ```text
-TIME SYNC: samples=5 | #1 req_tick=N ms res_tick=N ms round_trip=N ms unix_time=N ms | ... | #5 req_tick=N ms res_tick=N ms round_trip=N ms unix_time=N ms
+TIME SYNC: samples=5 | #1 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
+ | #2 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
+ ...
+ | #5 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
 ```
 
 `req_tick` is captured before the controller sends `TIME SYNC START ACK`.
-`res_tick` is captured immediately after the 8-byte Unix time arrives. Unsigned
+`ack_time` is captured by the host when that ACK arrives. `send_time` is captured
+by the host immediately before it sends the Time frame. `res_tick` is captured
+by the controller immediately after the complete Time frame arrives. Unsigned
 subtraction gives `round_trip = res_tick - req_tick`, including across one
-tick-counter wrap. `unix_time` is the millisecond value received from the host.
+tick-counter wrap. The host processing interval is `send_time - ack_time`.
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw

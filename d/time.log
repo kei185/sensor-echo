@@ -1,0 +1,6 @@
+RECEIVED TIME SYNC: samples=5 
+ #1 req_tick=2 ms res_tick=4 ms round_trip=2 ms unix_time=lu ms 
+ #2 req_tick=7 ms res_tick=9 ms round_trip=2 ms unix_time=lu ms 
+ #3 req_tick=11 ms res_tick=16 ms round_trip=5 ms unix_time=lu ms 
+ #4 req_tick=18 ms res_tick=22 ms round_trip=4 ms unix_time=lu ms 
+ #5 req_tick=24 ms res_tick=26 ms round_trip=2 ms unix_time=lu ms

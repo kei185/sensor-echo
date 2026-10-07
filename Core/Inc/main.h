@@ -38,6 +38,7 @@ extern "C"
         /* Exported types ------------------------------------------------------------*/
         /* USER CODE BEGIN ET */
 
+        extern RTC_HandleTypeDef  hrtc;
         extern UART_HandleTypeDef huart4;
         extern UART_HandleTypeDef huart2;
         extern DMA_HandleTypeDef  hdma_uart4_rx;
