@@ -18,6 +18,11 @@ sequenceDiagram
     LiDAR-->>Controller: Health status response
     Controller->>Host: Health status system frame
     Controller->>Host: READY system frame
+    Host->>Controller: Time sync start AA A4
+    Controller->>Host: TIME SYNC START ACK
+    Host->>Controller: Time AA A5 plus two host timestamps
+    Controller->>Controller: Correct and set RTC
+    Controller->>Host: TIME ACK and time-sync report
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
@@ -61,10 +66,8 @@ The Time frame uses this byte layout:
 | `2` | 8 bytes | `ack_time` | Unsigned 64-bit Unix milliseconds, little-endian |
 | `10` | 8 bytes | `send_time` | Unsigned 64-bit Unix milliseconds, little-endian |
 
-The host repeats this four-message exchange five times. After the fifth
-measurement, the controller sends one time-sync report containing all five
-samples. Starting a scan before five samples are collected ends the startup
-command loop without a partial report.
+The host performs this four-message exchange once. The controller uses the four
+timestamps to set its RTC, then sends one time-sync report.
 
 ## Time Synchronization
 
@@ -74,20 +77,34 @@ sequenceDiagram
     participant Host
     participant Controller
 
-    loop Five measurements
-        Host->>Controller: Time sync start AA A4
-        Controller->>Controller: Record req_tick
-        Controller->>Host: TIME SYNC START ACK, type 0x0A
-        Host->>Host: Record ack_time when ACK arrives
-        Host->>Host: Record send_time before sending Time
-        Host->>Controller: Time AA A5 plus ack_time and send_time
-        Controller->>Controller: Record res_tick and store sample
-        Controller->>Host: TIME ACK, type 0x0B
-    end
-    Controller->>Host: Five-sample report, type 0x0C
+    Host->>Controller: Time sync start AA A4
+    Controller->>Controller: Record req_tick
+    Controller->>Host: TIME SYNC START ACK, type 0x0A
+    Host->>Host: Record ack_time when ACK arrives
+    Host->>Host: Record send_time before sending Time
+    Host->>Controller: Time AA A5 plus ack_time and send_time
+    Controller->>Controller: Record res_tick
+    Controller->>Host: TIME ACK, type 0x0B
+    Controller->>Controller: Estimate current Unix time and set RTC
+    Controller->>Host: Measurement report, type 0x0C
 ```
 
-The controller sends the report immediately after the fifth `TIME ACK`.
+The controller removes host processing time from the controller-side round
+trip. It assumes equal transmission time in both directions:
+
+```text
+controller_round_trip = res_tick - req_tick
+host_processing       = send_time - ack_time
+network_round_trip    = controller_round_trip - host_processing
+time_at_res_tick      = send_time + network_round_trip / 2
+current_unix_time     = time_at_res_tick + (current_tick - res_tick)
+```
+
+All differences are in milliseconds. The controller rejects a measurement if
+the host clock moves backwards or `host_processing` is longer than
+`controller_round_trip`. The RTC stores UTC calendar time from 2000 through
+2099. Its subsecond shift register preserves the millisecond part at the RTC
+prescaler resolution.
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
@@ -103,7 +120,7 @@ The controller sends the report immediately after the fifth `TIME ACK`.
 |0xAA55|-|-| 0x09  Start scan acknowledged |-| `START SCAN ACK` |
 |0xAA55|-|-| 0x0A  Time-sync start acknowledged |-| `TIME SYNC START ACK` |
 |0xAA55|-|-| 0x0B  Time acknowledged |-| `TIME ACK` |
-|0xAA55|-|-| 0x0C  Time-sync report |-| Five time-sync measurements |
+|0xAA55|-|-| 0x0C  Time-sync report |-| One time-sync measurement |
 
 The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
@@ -128,15 +145,12 @@ after the 10-byte TX header. The header payload length marks the message end.
 | `0x09` | Host start command accepted | `START SCAN ACK` |
 | `0x0A` | Time-sync start command accepted | `TIME SYNC START ACK` |
 | `0x0B` | One Unix-time sample accepted | `TIME ACK` |
-| `0x0C` | Five time-sync samples completed | Time-sync measurement report |
+| `0x0C` | Time synchronization completed | Time-sync measurement report |
 
-A time-sync report is one ASCII payload. Each sample ends with `\r\n`:
+A time-sync report is one ASCII payload ending with `\r\n`:
 
 ```text
-TIME SYNC: samples=5 | #1 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
- | #2 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
- ...
- | #5 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
+TIME SYNC: samples=1 | #1 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
 ```
 
 `req_tick` is captured before the controller sends `TIME SYNC START ACK`.

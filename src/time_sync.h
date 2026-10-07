@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define TIME_SYNC_SAMPLE_COUNT 5u
-
 typedef struct
 {
         uint32_t req_time;  // HAL tick before the controller sends the start ACK.
@@ -16,11 +14,14 @@ typedef struct
 
 typedef struct
 {
-        TimeSyncMeasurement samples[TIME_SYNC_SAMPLE_COUNT];
-        uint8_t             count;
+        TimeSyncMeasurement measurement;
+        bool                complete;
 } TimeSyncSession;
 
-/** Send the accumulated report and clear the session after all five samples. */
+/** Set the RTC from a complete time-sync exchange. */
+bool time_sync_set_rtc(const TimeSyncSession* session);
+
+/** Send the measurement report and clear the completed session. */
 bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session);
 
 /**

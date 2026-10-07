@@ -19,6 +19,18 @@
 #define TIME_SYNC_SEND_TIME_OFFSET (TIME_SYNC_ACK_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define TIME_SYNC_TIME_FRAME_SIZE  (TIME_SYNC_SEND_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define UINT64_DECIMAL_TEXT_SIZE   21u
+#define UNIX_MILLISECONDS_PER_DAY  UINT64_C(86400000)
+#define UNIX_MILLISECONDS_PER_SECOND UINT64_C(1000)
+#define UNIX_DAYS_TO_2000            UINT64_C(10957)
+#define RTC_MIN_UNIX_TIME_MS         UINT64_C(946684800000)
+#define RTC_MAX_UNIX_TIME_MS         UINT64_C(4102444800000)
+
+typedef struct
+{
+        RTC_DateTypeDef date;
+        RTC_TimeTypeDef time;
+        uint16_t        millisecond;
+} RtcCalendar;
 
 static bool
 send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
@@ -55,46 +67,159 @@ static void uint64_to_decimal(uint64_t value, char to[UINT64_DECIMAL_TEXT_SIZE])
         to[length] = '\0';
 }
 
+static bool is_leap_year(uint16_t year)
+{
+        return year % 4u == 0u && (year % 100u != 0u || year % 400u == 0u);
+}
+
+static uint8_t days_in_month(uint16_t year, uint8_t month)
+{
+        static const uint8_t DAYS[] = {
+                31u,
+                28u,
+                31u,
+                30u,
+                31u,
+                30u,
+                31u,
+                31u,
+                30u,
+                31u,
+                30u,
+                31u,
+        };
+
+        if (month == 2u && is_leap_year(year))
+                return 29u;
+        return DAYS[month - 1u];
+}
+
+static bool unix_time_to_rtc(uint64_t unix_time_ms, RtcCalendar* calendar)
+{
+        if (calendar == NULL || unix_time_ms < RTC_MIN_UNIX_TIME_MS ||
+            unix_time_ms >= RTC_MAX_UNIX_TIME_MS)
+                return false;
+
+        uint64_t days_since_epoch    = unix_time_ms / UNIX_MILLISECONDS_PER_DAY;
+        uint64_t milliseconds_of_day = unix_time_ms % UNIX_MILLISECONDS_PER_DAY;
+        uint64_t days                = days_since_epoch - UNIX_DAYS_TO_2000;
+        uint16_t year                = 2000u;
+
+        while (days >= (is_leap_year(year) ? 366u : 365u)) {
+                days -= is_leap_year(year) ? 366u : 365u;
+                ++year;
+        }
+
+        uint8_t month = 1u;
+        while (days >= days_in_month(year, month)) {
+                days -= days_in_month(year, month);
+                ++month;
+        }
+
+        uint32_t seconds_of_day =
+                (uint32_t)(milliseconds_of_day / UNIX_MILLISECONDS_PER_SECOND);
+        *calendar = (RtcCalendar){
+                .date =
+                        {
+                                // 1970-01-01 was Thursday; HAL numbers Monday as 1.
+                                .WeekDay = (uint8_t)((days_since_epoch + 3u) % 7u + 1u),
+                                .Month   = month,
+                                .Date    = (uint8_t)(days + 1u),
+                                .Year    = (uint8_t)(year - 2000u),
+                        },
+                .time =
+                        {
+                                .Hours          = (uint8_t)(seconds_of_day / 3600u),
+                                .Minutes        = (uint8_t)((seconds_of_day / 60u) % 60u),
+                                .Seconds        = (uint8_t)(seconds_of_day % 60u),
+                                .DayLightSaving = RTC_DAYLIGHTSAVING_NONE,
+                                .StoreOperation = RTC_STOREOPERATION_RESET,
+                        },
+                .millisecond = (uint16_t)(milliseconds_of_day % 1000u),
+        };
+        return true;
+}
+
+static bool estimate_current_unix_time(
+        const TimeSyncSession* session, uint32_t current_tick, uint64_t* unix_time_ms)
+{
+        if (session == NULL || unix_time_ms == NULL || !session->complete)
+                return false;
+
+        const TimeSyncMeasurement* sample = &session->measurement;
+        uint32_t controller_round_trip    = sample->res_time - sample->req_time;
+
+        if (sample->send_time < sample->ack_time)
+                return false;
+
+        uint64_t host_processing = sample->send_time - sample->ack_time;
+        if (host_processing > controller_round_trip)
+                return false;
+
+        // Remove host work between t2 and t3; the remainder is UART travel time.
+        uint64_t network_round_trip = controller_round_trip - host_processing;
+        // Assume equal travel in both directions, then advance from t4 to now.
+        uint64_t one_way_delay         = network_round_trip / 2u;
+        uint64_t elapsed_after_receive = current_tick - sample->res_time;
+        if (sample->send_time > UINT64_MAX - one_way_delay ||
+            sample->send_time + one_way_delay > UINT64_MAX - elapsed_after_receive)
+                return false;
+
+        *unix_time_ms = sample->send_time + one_way_delay + elapsed_after_receive;
+        return true;
+}
+
+bool time_sync_set_rtc(const TimeSyncSession* session)
+{
+        uint64_t unix_time_ms;
+        if (!estimate_current_unix_time(session, HAL_GetTick(), &unix_time_ms))
+                return false;
+
+        RtcCalendar calendar;
+        if (!unix_time_to_rtc(unix_time_ms, &calendar))
+                return false;
+
+        if (HAL_RTC_SetDate(&hrtc, &calendar.date, RTC_FORMAT_BIN) != HAL_OK ||
+            HAL_RTC_SetTime(&hrtc, &calendar.time, RTC_FORMAT_BIN) != HAL_OK)
+                return false;
+
+        uint32_t subsecond_count = (uint32_t)((uint64_t)calendar.millisecond *
+                                              (hrtc.Init.SynchPrediv + 1u) / 1000u);
+        if (subsecond_count == 0u)
+                return true;
+
+        // RTC advances by 1 - SUBFS/(PREDIV_S + 1), matching the millisecond part.
+        uint32_t shift_subfs = hrtc.Init.SynchPrediv + 1u - subsecond_count;
+        return HAL_RTCEx_SetSynchroShift(&hrtc, RTC_SHIFTADD1S_SET, shift_subfs) ==
+               HAL_OK;
+}
+
 static size_t
 time_sync_format_report(char* to, size_t capacity, const TimeSyncSession* session)
 {
-        if (to == NULL || capacity == 0u || session == NULL || session->count == 0u ||
-            session->count > TIME_SYNC_SAMPLE_COUNT)
+        if (to == NULL || capacity == 0u || session == NULL || !session->complete)
                 return 0u;
 
-        int written =
-                snprintf(to, capacity, "TIME SYNC: samples=%u", (unsigned)session->count);
+        const TimeSyncMeasurement* sample     = &session->measurement;
+        uint32_t                   round_trip = sample->res_time - sample->req_time;
+        char                       ack_time[UINT64_DECIMAL_TEXT_SIZE];
+        char                       send_time[UINT64_DECIMAL_TEXT_SIZE];
+        uint64_to_decimal(sample->ack_time, ack_time);
+        uint64_to_decimal(sample->send_time, send_time);
+
+        int written = snprintf(
+                to,
+                capacity,
+                "TIME SYNC: samples=1 | #1 req_tick=%" PRIu32 " ms res_tick=%" PRIu32
+                " ms round_trip=%" PRIu32 " ms ack_time=%s ms send_time=%s ms\r\n",
+                sample->req_time,
+                sample->res_time,
+                round_trip,
+                ack_time,
+                send_time);
         if (written < 0 || (size_t)written >= capacity)
                 return 0u;
-
-        size_t used = (size_t)written;
-        for (uint8_t i = 0u; i < session->count; ++i) {
-                const TimeSyncMeasurement* sample = &session->samples[i];
-                const uint32_t round_trip         = sample->res_time - sample->req_time;
-                char           ack_time[UINT64_DECIMAL_TEXT_SIZE];
-                char           send_time[UINT64_DECIMAL_TEXT_SIZE];
-                uint64_to_decimal(sample->ack_time, ack_time);
-                uint64_to_decimal(sample->send_time, send_time);
-
-                written = snprintf(
-                        to + used,
-                        capacity - used,
-                        " | #%u req_tick=%" PRIu32 " ms res_tick=%" PRIu32
-                        " ms round_trip=%" PRIu32
-                        " ms ack_time=%s ms send_time=%s ms\r\n",
-                        (unsigned)(i + 1u),
-                        sample->req_time,
-                        sample->res_time,
-                        round_trip,
-                        ack_time,
-                        send_time);
-                if (written < 0 || (size_t)written >= capacity - used)
-                        return 0u;
-
-                used += (size_t)written;
-        }
-
-        return used;
+        return (size_t)written;
 }
 
 bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session)
@@ -115,6 +240,9 @@ bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session)
 
 bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
 {
+        if (session->complete)
+                return false;
+
         // prepare receive buffer
         uint8_t time_sync_start_frame[HOST_COMMAND_SIZE];
         // receive time sync start
@@ -173,12 +301,13 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                              << (i * 8u);
         }
 
-        session->samples[session->count++] = (TimeSyncMeasurement){
+        session->measurement = (TimeSyncMeasurement){
                 .req_time  = req_time,
                 .res_time  = res_time,
                 .ack_time  = ack_time,
                 .send_time = send_time,
         };
+        session->complete = true;
 
         // send time ack
         memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
@@ -191,48 +320,4 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                 return false;
 
         return true;
-}
-
-bool inti_time()
-{
-        HAL_RTC_SetDate(
-                &hrtc,
-                &(RTC_DateTypeDef){
-                        .WeekDay = RTC_WEEKDAY_MONDAY,
-                        .Month   = RTC_MONTH_JANUARY,
-                        .Date    = 1u,
-                        .Year    = 70u,
-                },
-                RTC_FORMAT_BIN);
-
-        HAL_RTC_SetTime(
-                &hrtc,
-                &(RTC_TimeTypeDef){
-                        .Hours   = 0u,
-                        .Minutes = 0u,
-                        .Seconds = 0u,
-                },
-                RTC_FORMAT_BIN);
-}
-bool set_time(TimeSyncSession tss)
-{
-        HAL_RTC_SetDate(
-                &hrtc,
-                &(RTC_DateTypeDef){
-                        .WeekDay = RTC_WEEKDAY_MONDAY,
-                        .Month   = RTC_MONTH_JANUARY,
-                        .Date    = (tss.samples[0].send_time / 86400000) % 31 + 1,
-                        .Year    = (tss.samples[0].send_time / 31536000000) % 100,
-                },
-                RTC_FORMAT_BIN);
-
-        HAL_RTC_SetTime(
-                &hrtc,
-                &(RTC_TimeTypeDef){
-
-                        .Hours   = (tss.samples[0].send_time / 3600000) % 24,
-                        .Minutes = (tss.samples[0].send_time / 60000) % 60,
-                        .Seconds = (tss.samples[0].send_time / 1000) % 60,
-                },
-                RTC_FORMAT_BIN);
 }
