@@ -1,4 +1,4 @@
-# LiDAR RX and Scan Data Flow
+# Connection, Recovery, and Scan Data Flow
 
 Startup uses blocking UART transfers. Scanning uses circular RX DMA and
 software-started TX DMA.
@@ -6,10 +6,106 @@ software-started TX DMA.
 TX slot ownership, queueing, and UART DMA dispatch are described in
 [tx.md](tx.md).
 
-## Startup
+## Connection and recovery
 
-The startup order and host messages are defined in
+The host starts a session with a handshake. If a protocol error occurs during
+startup or normal communication, both sides return to this stage.
+
+```mermaid
+flowchart TD
+    power["Power on"] --> handshake["Handshake stage<br/>Host retries every 3 seconds until ACK"]
+    handshake -- ACK received --> setup["Startup and UTC time sync<br/>Wait for host start command"]
+    setup -- Start command --> active["Normal communication<br/>Sensor frames and motor commands"]
+    setup -- Protocol error --> recover["Stop operation<br/>Discard old session data"]
+    active -- Protocol error --> recover
+    recover --> handshake
+    reset["Soft reset command<br/>During handshake, startup, or normal communication"] --> stop["Stop operation"]
+    stop --> reset_ack["Send SOFT RESET ACK<br/>Wait until UART transmission completes"]
+    reset_ack --> restart["Restart controller"]
+    restart --> handshake
+```
+
+```text
+                       NORMAL COMMUNICATION
+            +------+                            +------------+
+            | Host | -- left/right motor Q6 --> | Controller |
+            |      | <------ MOTOR ACK -------- |            |
+            |      | <-- sensor/encoder data -- |            |
+            +------+                            +------------+
+                |                                      |
+                +--------- protocol error -------------+
+                                   |
+                                   v
+                         Stop current operation
+                         Discard old session data
+                                   |
+                                   v
+                          HANDSHAKE STAGE
+            +------+                            +------------+
+            | Host | -- handshake, every 3 s --> | Controller |
+            |      | <----- handshake ACK ----- |            |
+            +------+                            +------------+
+                                   |
+                                   v
+                    Repeat startup and time sync
+                    Wait for a new start command
+```
+
+- Handshake retries stop when the host receives the ACK. There is no periodic
+  handshake during normal communication.
+- A protocol error includes a failed UART transfer, an invalid startup reply,
+  a malformed frame, an incomplete command after a receive timeout, or an
+  invalid time sample.
+- Recovery stops scanning and wheel motion, discards partial RX data and
+  queued TX frames, and clears the current command and time-sync state.
+- The controller waits for a new handshake. The host returns to its 3-second
+  handshake retry loop when it detects failure or a missing expected reply.
+- A new handshake ends any previous controller session before the ACK. This
+  keeps both sides in the same stage even if a previous ACK was lost.
+- Motor commands resume only after startup, time sync, and a new start command.
+- Each accepted motor command receives `MOTOR ACK`. If the expected ACK is
+  missing, the host returns to the handshake stage.
+- Soft reset also returns to the handshake stage. The controller sends its
+  reset ACK completely before restarting.
+
+These are protocol requirements; the new firmware handlers and recovery path
+are not implemented yet. The message bytes and startup order are defined in
 [frame.md](frame.md#startup-sequence).
+
+A LiDAR RX overrun uses the local recovery below. It does not restart the host
+handshake when the stream parser can find a new valid packet.
+
+## Motor command and ACK
+
+```mermaid
+flowchart TD
+    command["Host sends AA A7 and left/right Q6 rotations"] --> validate{"Valid motor command?"}
+    validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
+    validate -- Yes --> accept["Controller accepts requested rotations"]
+    accept --> ack["Controller sends MOTOR ACK"]
+    ack --> host{"Host received ACK?"}
+    host -- Yes --> active["Continue normal communication"]
+    host -- Receive timeout --> recover
+```
+
+The ACK confirms command acceptance. Encoder reports show the measured wheel
+rotations separately.
+
+## Soft reset
+
+```text
+Host                        Controller
+ | -- Soft reset AA A6 ------> |
+ |                             | Stop scanning and wheel motion
+ | <-- SOFT RESET ACK -------- |
+ |                             | Wait for complete ACK transmission
+ |                             | Restart and clear the old session
+ | -- Handshake, every 3 s ---> |
+ | <-- HANDSHAKE ACK ---------- |
+ |                             |
+ +---- Startup and time sync --+
+ +---- New start command ------+
+```
 
 ## Scan path
 
