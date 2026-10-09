@@ -5,3 +5,13 @@ mx.scratch
 lib/
 *.pdf
 .vscode
+# Keep local raster diagrams and screenshots outside Git.
+*.png
+*.PNG
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.tif
+*.tiff
