@@ -60,7 +60,7 @@ before starting a new scan.
 
 These messages have no terminator. Handshake, Start scan, Time sync start, and
 Soft reset are two-byte commands. Time appends two timestamps. Motor control
-uses the same 10-byte frame header and 4-byte payload as an encoder frame.
+appends the same 4-byte payload as an encoder report.
 
 The controller accepts `Time` only after it has acknowledged `Time sync start`.
 It accepts motor commands only during normal communication.
@@ -72,7 +72,7 @@ It accepts motor commands only during normal communication.
 | Time sync start | `0xAA 0xA4` | 2 bytes |
 | Time | `0xAA 0xA5`, ACK receive time, and Time send time | 18 bytes |
 | Soft reset | `0xAA 0xA6` | 2 bytes |
-| Motor control | `0xAA 0x55` frame, type `0x03`, left and right Q6 rotations | 14 bytes |
+| Motor control | `0xAA 0xA7`, left and right Q6 rotations | 6 bytes |
 
 `Handshake` is a connection request, not a heartbeat. The host stops its
 3-second retry loop after `HANDSHAKE ACK`. If a previous session is still active,
@@ -81,37 +81,38 @@ new handshake.
 
 ### Motor control
 
-The host sends the same frame layout used for encoder reports:
+The host sends a two-byte command followed by the same payload layout used for
+encoder reports:
 
 - Direction: host to controller
-- Header: 10 bytes, as defined in [Tx Frame](#tx-frame)
-- Type: `0x03`
+- Command: `0xAA 0xA7`
+- Total size: 6 bytes
 - Payload length: `4`
 - Payload: left wheel first, then right wheel; 16-bit Q6 rotations, little-endian
 - Unit: `rotations`, matching [Encoder Frame payload](#encoder-frame-payload)
-- Timestamp: the host's millisecond tick when it builds the frame
-- CRC: the same payload-length check as other frames
+- A two-byte command and its payload only; no TX frame header
 
-Direction gives the frame its meaning: host to controller carries requested
-wheel rotations; controller to host carries measured encoder rotations.
+Motor commands carry requested wheel rotations. Encoder reports carry measured
+wheel rotations in controller-to-host frames, type `0x03`.
 
-After accepting a valid motor frame, the controller sends `MOTOR ACK`, type
+After accepting a valid motor command, the controller sends `MOTOR ACK`, type
 `0x0E`. The ACK confirms that the requested values were accepted; it does not
-mean the wheels have completed those rotations. An invalid motor frame receives
+mean the wheels have completed those rotations. An invalid motor command receives
 no ACK and triggers protocol recovery.
 
 ```text
                     HOST -> CONTROLLER: MOTOR CONTROL
-byte offset   0       2       4    5        6             10       12       14
-              |-------|-------|----|--------|-------------|--------|--------|
-              | AA 55 | 04 00 | CRC| type 03| timestamp   | left Q6|right Q6|
-              |-------|-------|----|--------|-------------|--------|--------|
-              <----------- 10-byte header -------------><-- 4-byte data -->
+byte offset   0        2        4        6
+              +--------+--------+--------+
+              | AA A7  | left Q6|right Q6|
+              +--------+--------+--------+
+              <- cmd -><-- 4-byte data -->
 ```
 
 For left `12.5` rotations and right `7.25` rotations, the payload is
-`20 03 D0 01`, exactly as in the encoder example. The payload carries rotation
-counts; it does not carry RPM or rotations per second.
+`20 03 D0 01`, exactly as in the encoder example. The complete command is
+`AA A7 20 03 D0 01`. The payload carries rotation counts; it does not carry RPM
+or rotations per second.
 
 ### Soft reset
 
@@ -203,10 +204,9 @@ prescaler resolution.
 The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
 at `tx_buf + 10`, so it can be written before the header. Payload length counts
-payload bytes only. For controller-to-host frames, the timestamp is the
-controller's millisecond tick when the frame is built. Motor commands use the
-host's millisecond tick. These ticks are local to each sender; they are not Unix
-timestamps. CRC and type are one byte each and therefore have no byte order.
+payload bytes only. These frames travel from controller to host. The timestamp
+is the controller's millisecond tick when the frame is built; it is not a Unix
+timestamp. CRC and type are one byte each and therefore have no byte order.
 
 ### System Message
 
@@ -322,8 +322,8 @@ The host can convert gyroscope samples to `dps` and accelerometer samples to
 
 ### Encoder Frame payload
 
-Direction: controller to host, type `0x03`. Motor commands reuse this layout in
-the opposite direction.
+Direction: controller to host, type `0x03`. Motor commands reuse only the
+four-byte payload layout after their `0xAA 0xA7` command bytes.
 
 Size: 4 bytes per sample. The left wheel value comes first, followed by the
 right wheel value. Each value is a 16-bit Q6 wheel rotation count and uses the

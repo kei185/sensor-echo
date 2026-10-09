@@ -79,7 +79,7 @@ handshake when the stream parser can find a new valid packet.
 
 ```mermaid
 flowchart TD
-    command["Host sends left and right Q6 rotations"] --> validate{"Valid motor frame?"}
+    command["Host sends AA A7 and left/right Q6 rotations"] --> validate{"Valid motor command?"}
     validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
     validate -- Yes --> accept["Controller accepts requested rotations"]
     accept --> ack["Controller sends MOTOR ACK"]
