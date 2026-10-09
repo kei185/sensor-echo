@@ -19,12 +19,17 @@ flowchart TD
     setup -- Protocol error --> recover["Stop operation<br/>Discard old session data"]
     active -- Protocol error --> recover
     recover --> handshake
+    reset["Soft reset command<br/>During handshake, startup, or normal communication"] --> stop["Stop operation"]
+    stop --> reset_ack["Send SOFT RESET ACK<br/>Wait until UART transmission completes"]
+    reset_ack --> restart["Restart controller"]
+    restart --> handshake
 ```
 
 ```text
                        NORMAL COMMUNICATION
             +------+                            +------------+
             | Host | -- left/right motor Q6 --> | Controller |
+            |      | <------ MOTOR ACK -------- |            |
             |      | <-- sensor/encoder data -- |            |
             +------+                            +------------+
                 |                                      |
@@ -55,14 +60,52 @@ flowchart TD
   queued TX frames, and clears the current command and time-sync state.
 - The controller waits for a new handshake. The host returns to its 3-second
   handshake retry loop when it detects failure or a missing expected reply.
+- A new handshake ends any previous controller session before the ACK. This
+  keeps both sides in the same stage even if a previous ACK was lost.
 - Motor commands resume only after startup, time sync, and a new start command.
+- Each accepted motor command receives `MOTOR ACK`. If the expected ACK is
+  missing, the host returns to the handshake stage.
+- Soft reset also returns to the handshake stage. The controller sends its
+  reset ACK completely before restarting.
 
-This is the required recovery behavior; the firmware recovery path is not
-implemented yet. The message bytes and startup order are defined in
+These are protocol requirements; the new firmware handlers and recovery path
+are not implemented yet. The message bytes and startup order are defined in
 [frame.md](frame.md#startup-sequence).
 
 A LiDAR RX overrun uses the local recovery below. It does not restart the host
 handshake when the stream parser can find a new valid packet.
+
+## Motor command and ACK
+
+```mermaid
+flowchart TD
+    command["Host sends left and right Q6 rotations"] --> validate{"Valid motor frame?"}
+    validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
+    validate -- Yes --> accept["Controller accepts requested rotations"]
+    accept --> ack["Controller sends MOTOR ACK"]
+    ack --> host{"Host received ACK?"}
+    host -- Yes --> active["Continue normal communication"]
+    host -- Receive timeout --> recover
+```
+
+The ACK confirms command acceptance. Encoder reports show the measured wheel
+rotations separately.
+
+## Soft reset
+
+```text
+Host                        Controller
+ | -- Soft reset AA A6 ------> |
+ |                             | Stop scanning and wheel motion
+ | <-- SOFT RESET ACK -------- |
+ |                             | Wait for complete ACK transmission
+ |                             | Restart and clear the old session
+ | -- Handshake, every 3 s ---> |
+ | <-- HANDSHAKE ACK ---------- |
+ |                             |
+ +---- Startup and time sync --+
+ +---- New start command ------+
+```
 
 ## Scan path
 
