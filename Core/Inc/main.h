@@ -39,6 +39,7 @@ extern "C"
         /* USER CODE BEGIN ET */
 
         extern RTC_HandleTypeDef  hrtc;
+        extern SPI_HandleTypeDef  hspi2;
         extern UART_HandleTypeDef huart4;
         extern UART_HandleTypeDef huart2;
         extern DMA_HandleTypeDef  hdma_uart4_rx;
@@ -66,6 +67,12 @@ extern "C"
 /* Private defines -----------------------------------------------------------*/
 #define B1_Pin                             GPIO_PIN_13
 #define B1_GPIO_Port                       GPIOC
+#define IMU_INT1_Pin                       GPIO_PIN_0
+#define IMU_INT1_GPIO_Port                 GPIOC
+#define IMU_INT1_EXTI_IRQn                 EXTI0_IRQn
+#define IMU_INT2_Pin                       GPIO_PIN_3
+#define IMU_INT2_GPIO_Port                 GPIOC
+#define IMU_INT2_EXTI_IRQn                 EXTI3_IRQn
 #define USART_TX_Pin                       GPIO_PIN_2
 #define USART_TX_GPIO_Port                 GPIOA
 #define USART_RX_Pin                       GPIO_PIN_3
@@ -76,6 +83,8 @@ extern "C"
 #define SCANNING_GPIO_Port                 GPIOB
 #define INITIAL_HANDSHAKE_FAILED_Pin       GPIO_PIN_2
 #define INITIAL_HANDSHAKE_FAILED_GPIO_Port GPIOB
+#define SPI2_CS_Pin                        GPIO_PIN_12
+#define SPI2_CS_GPIO_Port                  GPIOB
 #define TMS_Pin                            GPIO_PIN_13
 #define TMS_GPIO_Port                      GPIOA
 #define TCK_Pin                            GPIO_PIN_14

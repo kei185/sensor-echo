@@ -50,6 +50,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/parser/scan.c
     src/lidar/sys.c
     src/lidar/core.c
+    src/imu/sys.c
+    src/imu/handler.c
     src/tx/frame.c
     src/tx/header.c
     lib/libcrc-2.0/src/crc8.c

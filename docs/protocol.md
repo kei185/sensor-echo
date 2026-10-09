@@ -1,7 +1,10 @@
-# Startup and Scan Data Flow
+# LiDAR RX and Scan Data Flow
 
 Startup uses blocking UART transfers. Scanning uses circular RX DMA and
 software-started TX DMA.
+
+TX slot ownership, queueing, and UART DMA dispatch are described in
+[tx.md](tx.md).
 
 ## Startup
 
@@ -31,20 +34,6 @@ flowchart LR
 
 RX DMA continues while all TX slots are busy. The CPU read position stays
 unchanged, so the next free-slot check can detect whether DMA passed it.
-
-One host frame uses one TX slot. A slot follows this cycle:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Free
-    Free --> Filling
-    Filling --> Queued
-    Queued --> Transmitting
-    Transmitting --> Free: UART transmission complete
-```
-
-The queue stores each slot as free or full. The UART state distinguishes a
-queued full slot from the full slot currently being transmitted.
 
 ## RX ring positions
 
@@ -112,32 +101,6 @@ The ring position detects overwritten bytes. A checksum cannot replace that
 check. LiDAR packet `CS` and `LastCRC` are future checks. The current host
 CRC covers only the two payload-length bytes.
 
-## Frame and TX storage sizes
-
-| Item | Largest size |
-| --- | ---: |
-| One LiDAR packet with one-byte LSN | `10 + 3 * 255 = 775` bytes |
-| One host LiDAR frame | `10 + 4 * 255 = 1030` bytes |
-| One TX slot | 1344 bytes |
-
-```text
-TX storage: 6720 bytes
-+-----------------+-----------------+-----------------+-----------------+-----------------+
-| slot 0: 1344 B  | slot 1: 1344 B  | slot 2: 1344 B  | slot 3: 1344 B  | slot 4: 1344 B  |
-+-----------------+-----------------+-----------------+-----------------+-----------------+
-0                1344              2688              4032              5376              6720
-
-Largest frame: [header 10 B][255 points x 4 B][unused 314 B]
-```
-
-One slot can be transmitting while four complete frames wait. The payload
-arrays use 6720 bytes. The full queue object uses 6764 bytes after metadata
-and alignment.
-
-More slots absorb a short burst. They do not increase the sustained UART
-rate. With 8N1 framing, the maximum payload rate is approximately
-`baud rate / 10` bytes per second.
-
 ## LiDAR-only throughput at 230400 bps
 
 | Quantity | Calculation | Result |
@@ -153,4 +116,5 @@ same interval. This leaves about 1173 bytes for 10-byte host headers, or a
 theoretical maximum of 117 LiDAR packets per rotation. Actual packet count and
 TX queue occupancy must be measured before using this limit.
 
-For host commands and frame fields, see [frame.md](frame.md).
+For TX queue capacity and lifecycle, see [tx.md](tx.md). For host commands and
+frame fields, see [frame.md](frame.md).

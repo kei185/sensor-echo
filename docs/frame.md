@@ -198,11 +198,44 @@ The same little-endian order is used by the payload length and timestamp in the
 frame header. All currently defined multi-byte numeric fields in the host frame
 are therefore little-endian.
 
-The RX ring and TX queue design are described in [protocol.md](protocol.md).
+The RX ring is described in [protocol.md](protocol.md). The TX queue and slot
+lifecycle are described in [tx.md](tx.md).
 
 
-### IMU Frame payload 
-TODO
+### IMU frame payload
+
+The controller sends the IMU sample buffer directly as the payload.
+
+- Payload size: 12 bytes
+- Field order: sensor register order starting at `OUTX_L_G`
+- Value format: raw 16-bit two's-complement sample
+- Byte order: little-endian; low register byte first
+- Unit: sensor LSB
+- Conversion: none; the host applies the configured full-scale sensitivity
+
+```mermaid
+%%{init: {'theme': 'dark'}}%%
+
+packet
++16: "gyroscope X"
++16: "gyroscope Y"
++16: "gyroscope Z"
++16: "accelerometer X"
++16: "accelerometer Y"
++16: "accelerometer Z"
+```
+
+| Byte offset | Size | Sample | Unit |
+|---:|---:|---|---|
+| `0` | 2 bytes | Gyroscope X | LSB |
+| `2` | 2 bytes | Gyroscope Y | LSB |
+| `4` | 2 bytes | Gyroscope Z | LSB |
+| `6` | 2 bytes | Accelerometer X | LSB |
+| `8` | 2 bytes | Accelerometer Y | LSB |
+| `10` | 2 bytes | Accelerometer Z | LSB |
+
+The host can convert gyroscope samples to `dps` and accelerometer samples to
+`g` when physical units are needed.
 
 ### Encoder Frame payload
 

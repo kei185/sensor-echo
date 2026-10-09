@@ -24,6 +24,9 @@
 /* USER CODE BEGIN Includes */
 #include "arbiter.h"
 #include "motor.h"
+#include "imu/handler.h"
+#include "stm32f4xx_hal_gpio.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,6 +60,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern SPI_HandleTypeDef  hspi2;
 extern TIM_HandleTypeDef  htim2;
 extern DMA_HandleTypeDef  hdma_uart4_rx;
 extern DMA_HandleTypeDef  hdma_usart2_tx;
@@ -201,6 +205,34 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+ * @brief This function handles EXTI line 0 interrupt.
+ */
+void EXTI0_IRQHandler(void)
+{
+        /* USER CODE BEGIN EXTI0_IRQn 0 */
+
+        /* USER CODE END EXTI0_IRQn 0 */
+        HAL_GPIO_EXTI_IRQHandler(IMU_INT1_Pin);
+        /* USER CODE BEGIN EXTI0_IRQn 1 */
+
+        /* USER CODE END EXTI0_IRQn 1 */
+}
+
+/**
+ * @brief This function handles EXTI line 3 interrupt.
+ */
+void EXTI3_IRQHandler(void)
+{
+        /* USER CODE BEGIN EXTI3_IRQn 0 */
+
+        /* USER CODE END EXTI3_IRQn 0 */
+        HAL_GPIO_EXTI_IRQHandler(IMU_INT2_Pin);
+        /* USER CODE BEGIN EXTI3_IRQn 1 */
+
+        /* USER CODE END EXTI3_IRQn 1 */
+}
+
+/**
  * @brief This function handles DMA1 stream2 global interrupt.
  */
 void DMA1_Stream2_IRQHandler(void)
@@ -240,6 +272,20 @@ void TIM2_IRQHandler(void)
         /* USER CODE BEGIN TIM2_IRQn 1 */
 
         /* USER CODE END TIM2_IRQn 1 */
+}
+
+/**
+ * @brief This function handles SPI2 global interrupt.
+ */
+void SPI2_IRQHandler(void)
+{
+        /* USER CODE BEGIN SPI2_IRQn 0 */
+
+        /* USER CODE END SPI2_IRQn 0 */
+        HAL_SPI_IRQHandler(&hspi2);
+        /* USER CODE BEGIN SPI2_IRQn 1 */
+
+        /* USER CODE END SPI2_IRQn 1 */
 }
 
 /**
@@ -287,6 +333,16 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
 {
         if (huart == &huart2)
                 uart_transmit_complete_handler();
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+        if (GPIO_Pin == IMU_INT1_Pin) {
+                imu_accel_ready = true;
+        }
+        if (GPIO_Pin == IMU_INT2_Pin) {
+                imu_rot_ready = true;
+        }
 }
 
 /* USER CODE END 1 */

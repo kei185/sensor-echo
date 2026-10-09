@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "protocol.h"
+#include "stm32f4xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -42,6 +43,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 RTC_HandleTypeDef hrtc;
+SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim2;
 
@@ -62,6 +64,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_UART4_Init(void);
 static void MX_RTC_Init(void);
+static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -105,12 +108,18 @@ int main(void)
         MX_TIM2_Init();
         MX_UART4_Init();
         MX_RTC_Init();
+        MX_SPI2_Init();
         /* USER CODE BEGIN 2 */
 
         /* USER CODE END 2 */
 
         /* Infinite loop */
+        /* USER CODE BEGIN WHILE */
+        /* USER CODE END WHILE */
+
+        /* USER CODE BEGIN 3 */
         loop();
+        /* USER CODE END 3 */
 }
 
 /**
@@ -192,6 +201,38 @@ static void MX_RTC_Init(void)
         /* USER CODE BEGIN RTC_Init 2 */
 
         /* USER CODE END RTC_Init 2 */
+}
+/**
+@brief SPI2 Initialization Function * @param None * @retval None */
+static void MX_SPI2_Init(void)
+{
+
+        /* USER CODE BEGIN SPI2_Init 0 */
+
+        /* USER CODE END SPI2_Init 0 */
+
+        /* USER CODE BEGIN SPI2_Init 1 */
+
+        /* USER CODE END SPI2_Init 1 */
+        /* SPI2 parameter configuration*/
+        hspi2.Instance               = SPI2;
+        hspi2.Init.Mode              = SPI_MODE_MASTER;
+        hspi2.Init.Direction         = SPI_DIRECTION_2LINES;
+        hspi2.Init.DataSize          = SPI_DATASIZE_8BIT;
+        hspi2.Init.CLKPolarity       = SPI_POLARITY_LOW;
+        hspi2.Init.CLKPhase          = SPI_PHASE_1EDGE;
+        hspi2.Init.NSS               = SPI_NSS_SOFT;
+        hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+        hspi2.Init.FirstBit          = SPI_FIRSTBIT_MSB;
+        hspi2.Init.TIMode            = SPI_TIMODE_DISABLE;
+        hspi2.Init.CRCCalculation    = SPI_CRCCALCULATION_DISABLE;
+        hspi2.Init.CRCPolynomial     = 10;
+        if (HAL_SPI_Init(&hspi2) != HAL_OK) {
+                Error_Handler();
+        }
+        /* USER CODE BEGIN SPI2_Init 2 */
+
+        /* USER CODE END SPI2_Init 2 */
 }
 
 /**
@@ -345,6 +386,9 @@ static void MX_GPIO_Init(void)
                 GPIO_PIN_RESET);
 
         /*Configure GPIO pin Output Level */
+        HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
+
+        /*Configure GPIO pin Output Level */
         HAL_GPIO_WritePin(GPIOC, AIN1_Pin | AIN2_Pin | M_MODE_Pin, GPIO_PIN_RESET);
 
         /*Configure GPIO pin : B1_Pin */
@@ -353,6 +397,12 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Pull = GPIO_NOPULL;
         HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
+        /*Configure GPIO pins : IMU_INT1_Pin IMU_INT2_Pin */
+        GPIO_InitStruct.Pin  = IMU_INT1_Pin | IMU_INT2_Pin;
+        GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+        GPIO_InitStruct.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
         /*Configure GPIO pin : LD2_Pin */
         GPIO_InitStruct.Pin   = LD2_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
@@ -360,8 +410,9 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-        /*Configure GPIO pins : SCANNING_Pin INITIAL_HANDSHAKE_FAILED_Pin */
-        GPIO_InitStruct.Pin   = SCANNING_Pin | INITIAL_HANDSHAKE_FAILED_Pin;
+        /*Configure GPIO pins : SCANNING_Pin INITIAL_HANDSHAKE_FAILED_Pin
+         * SPI2_CS_Pin */
+        GPIO_InitStruct.Pin   = SCANNING_Pin | INITIAL_HANDSHAKE_FAILED_Pin | SPI2_CS_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -374,7 +425,15 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+        /* EXTI interrupt init*/
+        HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+        HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+        HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+        HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
         /* USER CODE BEGIN MX_GPIO_Init_2 */
+        HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, 1);
 
         /* USER CODE END MX_GPIO_Init_2 */
 }
@@ -390,7 +449,8 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
         /* USER CODE BEGIN Error_Handler_Debug */
-        /* User can add his own implementation to report the HAL error return state */
+        /* User can add his own implementation to report the HAL error return
+         * state */
         __disable_irq();
         while (1) {
         }
@@ -407,8 +467,9 @@ void Error_Handler(void)
 void assert_failed(uint8_t* file, uint32_t line)
 {
         /* USER CODE BEGIN 6 */
-        /* User can add his own implementation to report the file name and line number,
-           ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+        /* User can add his own implementation to report the file name and line
+           number, ex: printf("Wrong parameters value: file %s on line %d\r\n",
+           file, line) */
         /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
