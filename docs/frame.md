@@ -3,6 +3,13 @@
 Startup uses blocking UART transfers. Scan data uses DMA after the host sends the
 start scan command.
 
+The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
+Initialization starts after this exchange. For protocol errors and recovery,
+see [protocol.md](protocol.md#connection-and-recovery).
+
+Handshake, motor commands, and recovery are protocol requirements. Their
+firmware handlers are not implemented yet.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -10,6 +17,12 @@ sequenceDiagram
     participant Controller
     participant LiDAR
 
+    loop Retry every 3 seconds until HANDSHAKE ACK arrives
+        Host->>Controller: Handshake AA A0
+        opt Controller receives the handshake
+            Controller->>Host: HANDSHAKE ACK system frame
+        end
+    end
     Controller->>Host: INITIALIZING system frame
     Controller->>LiDAR: Device information request A5 90
     LiDAR-->>Controller: Device information response
@@ -21,8 +34,9 @@ sequenceDiagram
     Host->>Controller: Time sync start AA A4
     Controller->>Host: TIME SYNC START ACK
     Host->>Controller: Time AA A5 plus two host timestamps
+    Controller->>Host: TIME ACK system frame
     Controller->>Controller: Correct and set RTC
-    Controller->>Host: TIME ACK and time-sync report
+    Controller->>Host: Time-sync report
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
@@ -38,18 +52,60 @@ before it starts RX DMA. The ACK confirms the host command only. It does not
 confirm DMA startup, the `A5 60` UART transfer, or a LiDAR response.
 
 If UART communication or reply validation fails, the controller sends a
-`STARTUP FAILED` system frame and does not start scanning.
+`STARTUP FAILED` system frame when possible and returns to the handshake stage.
+The host retries the handshake, then repeats startup and time synchronization
+before starting a new scan.
 
 ## Host-to-Controller Commands
 
-These messages have no terminator. The controller accepts `Time` only after it
-has acknowledged `Time sync start`.
+These messages have no terminator. Handshake, Start scan, and Time sync start
+are two-byte commands. Time appends two timestamps. Motor control uses the same
+10-byte frame header and 4-byte payload as an encoder frame.
+
+The controller accepts `Time` only after it has acknowledged `Time sync start`.
+It accepts motor commands only during normal communication.
 
 | Message | Wire data | Size |
 |---|---|---:|
+| Handshake | `0xAA 0xA0` | 2 bytes |
 | Start scan | `0xAA 0xA2` | 2 bytes |
 | Time sync start | `0xAA 0xA4` | 2 bytes |
 | Time | `0xAA 0xA5`, ACK receive time, and Time send time | 18 bytes |
+| Motor control | `0xAA 0x55` frame, type `0x03`, left and right Q6 rotations | 14 bytes |
+
+`Handshake` is a connection request, not a heartbeat. The host stops its
+3-second retry loop after `HANDSHAKE ACK`.
+
+### Motor control
+
+The host sends the same frame layout used for encoder reports:
+
+- Direction: host to controller
+- Header: 10 bytes, as defined in [Tx Frame](#tx-frame)
+- Type: `0x03`
+- Payload length: `4`
+- Payload: left wheel first, then right wheel; 16-bit Q6 rotations, little-endian
+- Unit: `rotations`, matching [Encoder Frame payload](#encoder-frame-payload)
+- Timestamp: the host's millisecond tick when it builds the frame
+- CRC: the same payload-length check as other frames
+
+Direction gives the frame its meaning: host to controller carries requested
+wheel rotations; controller to host carries measured encoder rotations.
+
+```text
+                    HOST -> CONTROLLER: MOTOR CONTROL
+byte offset   0       2       4    5        6             10       12       14
+              |-------|-------|----|--------|-------------|--------|--------|
+              | AA 55 | 04 00 | CRC| type 03| timestamp   | left Q6|right Q6|
+              |-------|-------|----|--------|-------------|--------|--------|
+              <----------- 10-byte header -------------><-- 4-byte data -->
+```
+
+For left `12.5` rotations and right `7.25` rotations, the payload is
+`20 03 D0 01`, exactly as in the encoder example. The payload carries rotation
+counts; it does not carry RPM or rotations per second.
+
+### Time command
 
 After `0xAA 0xA4`, the controller records `req_tick` and replies with
 `TIME SYNC START ACK`. The host records `ack_time` when it receives that ACK.
@@ -121,12 +177,15 @@ prescaler resolution.
 |0xAA55|-|-| 0x0A  Time-sync start acknowledged |-| `TIME SYNC START ACK` |
 |0xAA55|-|-| 0x0B  Time acknowledged |-| `TIME ACK` |
 |0xAA55|-|-| 0x0C  Time-sync report |-| One time-sync measurement |
+|0xAA55|-|-| 0x0D  Handshake acknowledged |-| `HANDSHAKE ACK` |
 
 The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
 at `tx_buf + 10`, so it can be written before the header. Payload length counts
-payload bytes only. The timestamp is the controller's millisecond tick when the
-frame is built. CRC and type are one byte each and therefore have no byte order.
+payload bytes only. For controller-to-host frames, the timestamp is the
+controller's millisecond tick when the frame is built. Motor commands use the
+host's millisecond tick. These ticks are local to each sender; they are not Unix
+timestamps. CRC and type are one byte each and therefore have no byte order.
 
 ### System Message
 
@@ -146,6 +205,7 @@ after the 10-byte TX header. The header payload length marks the message end.
 | `0x0A` | Time-sync start command accepted | `TIME SYNC START ACK` |
 | `0x0B` | One Unix-time sample accepted | `TIME ACK` |
 | `0x0C` | Time synchronization completed | Time-sync measurement report |
+| `0x0D` | Handshake received | `HANDSHAKE ACK` |
 
 A time-sync report is one ASCII payload ending with `\r\n`:
 
@@ -238,6 +298,9 @@ The host can convert gyroscope samples to `dps` and accelerometer samples to
 `g` when physical units are needed.
 
 ### Encoder Frame payload
+
+Direction: controller to host, type `0x03`. Motor commands reuse this layout in
+the opposite direction.
 
 Size: 4 bytes per sample. The left wheel value comes first, followed by the
 right wheel value. Each value is a 16-bit Q6 wheel rotation count and uses the

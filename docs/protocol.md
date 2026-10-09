@@ -1,4 +1,4 @@
-# LiDAR RX and Scan Data Flow
+# Connection, Recovery, and Scan Data Flow
 
 Startup uses blocking UART transfers. Scanning uses circular RX DMA and
 software-started TX DMA.
@@ -6,10 +6,63 @@ software-started TX DMA.
 TX slot ownership, queueing, and UART DMA dispatch are described in
 [tx.md](tx.md).
 
-## Startup
+## Connection and recovery
 
-The startup order and host messages are defined in
+The host starts a session with a handshake. If a protocol error occurs during
+startup or normal communication, both sides return to this stage.
+
+```mermaid
+flowchart TD
+    power["Power on"] --> handshake["Handshake stage<br/>Host retries every 3 seconds until ACK"]
+    handshake -- ACK received --> setup["Startup and UTC time sync<br/>Wait for host start command"]
+    setup -- Start command --> active["Normal communication<br/>Sensor frames and motor commands"]
+    setup -- Protocol error --> recover["Stop operation<br/>Discard old session data"]
+    active -- Protocol error --> recover
+    recover --> handshake
+```
+
+```text
+                       NORMAL COMMUNICATION
+            +------+                            +------------+
+            | Host | -- left/right motor Q6 --> | Controller |
+            |      | <-- sensor/encoder data -- |            |
+            +------+                            +------------+
+                |                                      |
+                +--------- protocol error -------------+
+                                   |
+                                   v
+                         Stop current operation
+                         Discard old session data
+                                   |
+                                   v
+                          HANDSHAKE STAGE
+            +------+                            +------------+
+            | Host | -- handshake, every 3 s --> | Controller |
+            |      | <----- handshake ACK ----- |            |
+            +------+                            +------------+
+                                   |
+                                   v
+                    Repeat startup and time sync
+                    Wait for a new start command
+```
+
+- Handshake retries stop when the host receives the ACK. There is no periodic
+  handshake during normal communication.
+- A protocol error includes a failed UART transfer, an invalid startup reply,
+  a malformed frame, an incomplete command after a receive timeout, or an
+  invalid time sample.
+- Recovery stops scanning and wheel motion, discards partial RX data and
+  queued TX frames, and clears the current command and time-sync state.
+- The controller waits for a new handshake. The host returns to its 3-second
+  handshake retry loop when it detects failure or a missing expected reply.
+- Motor commands resume only after startup, time sync, and a new start command.
+
+This is the required recovery behavior; the firmware recovery path is not
+implemented yet. The message bytes and startup order are defined in
 [frame.md](frame.md#startup-sequence).
+
+A LiDAR RX overrun uses the local recovery below. It does not restart the host
+handshake when the stream parser can find a new valid packet.
 
 ## Scan path
 
