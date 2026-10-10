@@ -20,8 +20,8 @@
 // bool enc_arrived = false;
 void loop()
 {
-        if (!run_startup_sequence())
-                Error_Handler();
+        while (!run_startup_sequence())
+                ;
 
         // // send start scan command
         HAL_StatusTypeDef scan_start_status =

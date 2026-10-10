@@ -27,6 +27,8 @@ target_compile_options(startup_test PRIVATE
     -Wall
     -Wextra
     -Werror
+    # mainでセンサー情報の取得がコメントアウトされているため。
+    -Wno-unused-function
 )
 
 add_test(NAME startup_test COMMAND startup_test)
