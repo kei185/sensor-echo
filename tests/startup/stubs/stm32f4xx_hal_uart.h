@@ -26,7 +26,7 @@ HAL_StatusTypeDef HAL_UART_Transmit(
 HAL_StatusTypeDef HAL_UART_Receive(
         UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout);
 HAL_StatusTypeDef
-HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length);
+HAL_UART_Receive_DMA(UART_HandleTypeDef* uart, uint8_t* data, uint16_t length);
 uint32_t HAL_GetTick(void);
 
 HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef* huart);

@@ -27,6 +27,7 @@ static uint8_t         receive_count;
 static uint32_t        fake_tick;
 static bool            invalid_time_command;
 static uint16_t        timeout_receive_size;
+static uint8_t         command_byte_count;
 static char            report_payload[CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE + 1u];
 static size_t          report_length;
 static RTC_DateTypeDef set_date;
@@ -53,6 +54,7 @@ static void reset_uart_state(void)
         fake_tick            = 1000u;
         invalid_time_command = false;
         timeout_receive_size = 0u;
+        command_byte_count   = 0u;
         memset(report_payload, 0, sizeof(report_payload));
         report_length = 0u;
         memset(&set_date, 0, sizeof(set_date));
@@ -124,29 +126,32 @@ HAL_StatusTypeDef HAL_UART_Receive(
         UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout)
 {
         assert(huart == &huart2);
-        assert(timeout == TIME_SYNC_RESPONSE_TIMEOUT_MS);
-        if (length == timeout_receive_size)
-                return HAL_TIMEOUT;
-
-        if (length == HOST_COMMAND_SIZE) {
-                memcpy(data,
-                       HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START],
-                       HOST_COMMAND_SIZE);
+        if (length == 1u) {
+                assert(timeout == (command_byte_count % 2u == 0u
+                                           ? HOST_HANDSHAKE_RETRY_INTERVAL_MS
+                                           : 100u));
+                if (timeout_receive_size == 1u)
+                        return HAL_TIMEOUT;
+                assert(command_byte_count < 4u);
+                HostCommand command = command_byte_count < 2u
+                                              ? HOST_COMMAND_TIME_SYNC_START
+                                              : HOST_COMMAND_TIME;
+                *data               = HOST_COMMANDS[command][command_byte_count % 2u];
+                if (invalid_time_command && command_byte_count == 3u)
+                        *data ^= 0x01u;
+                ++command_byte_count;
                 return HAL_OK;
         }
-
-        assert(length == HOST_COMMAND_SIZE + sizeof(uint64_t) * 2u);
-
-        memcpy(data, HOST_COMMANDS[HOST_COMMAND_TIME], HOST_COMMAND_SIZE);
-        if (invalid_time_command)
-                data[1] ^= 0x01u;
+        assert(length == sizeof(uint64_t) * 2u);
+        assert(timeout == HOST_HANDSHAKE_RETRY_INTERVAL_MS);
+        if (length == timeout_receive_size)
+                return HAL_TIMEOUT;
 
         uint64_t ack_time  = UINT64_C(1791160123000) + (uint64_t)receive_count * 10u;
         uint64_t send_time = ack_time + 1u;
         for (uint8_t i = 0u; i < sizeof(uint64_t); ++i) {
-                data[HOST_COMMAND_SIZE + i] = (uint8_t)(ack_time >> (i * 8u));
-                data[HOST_COMMAND_SIZE + sizeof(uint64_t) + i] =
-                        (uint8_t)(send_time >> (i * 8u));
+                data[i]                    = (uint8_t)(ack_time >> (i * 8u));
+                data[sizeof(uint64_t) + i] = (uint8_t)(send_time >> (i * 8u));
         }
 
         ++receive_count;
@@ -170,7 +175,7 @@ static void handler_collects_and_reports_one_measurement(void)
         uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
 
         // 実行
-        assert(time_sync_handle_start(tx_frame, &session));
+        assert(time_sync_handle_start(tx_frame, &session) == TIME_SYNC_COMPLETE);
         assert(time_sync_send_report_if_ready(tx_frame, &session));
 
         // 検証: 1回の時刻交換をACKした後、その計測値をreportする。
@@ -198,7 +203,7 @@ static void handler_reports_round_trip_across_tick_wrap(void)
         uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
 
         // 実行
-        assert(time_sync_handle_start(tx_frame, &session));
+        assert(time_sync_handle_start(tx_frame, &session) == TIME_SYNC_COMPLETE);
         assert(time_sync_send_report_if_ready(tx_frame, &session));
 
         // 検証: unsigned tick差分なら1回のwrapをまたいでも経過時間を得られる。
@@ -271,10 +276,10 @@ static void handler_rejects_a_time_frame_with_the_wrong_command(void)
         uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
 
         // 実行
-        bool handled = time_sync_handle_start(tx_frame, &session);
+        TimeSyncResult handled = time_sync_handle_start(tx_frame, &session);
 
         // 検証: start ACKの後、不正なtime frameを保存・ACKしない。
-        assert(!handled);
+        assert(handled == TIME_SYNC_FAILED);
         assert(event_count == 1u);
         assert(events[0] == EVENT_TIME_SYNC_START_ACK);
         assert(!session.complete);
@@ -282,15 +287,14 @@ static void handler_rejects_a_time_frame_with_the_wrong_command(void)
 
 static void handler_returns_when_either_host_frame_times_out(void)
 {
-        const uint16_t lengths[] = {HOST_COMMAND_SIZE,
-                                    HOST_COMMAND_SIZE + TIME_SYNC_PAYLOAD_SIZE};
+        const uint16_t lengths[] = {1u, sizeof(uint64_t) * 2u};
         for (size_t i = 0u; i < sizeof(lengths) / sizeof(lengths[0]); ++i) {
                 reset_uart_state();
                 timeout_receive_size                       = lengths[i];
                 TimeSyncSession session                    = {0};
                 uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
                 // コマンド待ち・payload待ちの両方で、未完了のまま呼び出し元へ戻る。
-                assert(!time_sync_handle_start(tx_frame, &session));
+                assert(time_sync_handle_start(tx_frame, &session) == TIME_SYNC_FAILED);
                 assert(!session.complete);
                 assert(event_count == i);
         }

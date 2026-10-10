@@ -14,8 +14,10 @@
 #include "tx/frame.h"
 #include "tx/header.h"
 
-#define TIME_SYNC_UART_TIMEOUT_MS  100u
-#define TIME_SYNC_ACK_TIME_OFFSET  HOST_COMMAND_SIZE
+#define TIME_SYNC_UART_TIMEOUT_MS     100u
+#define TIME_SYNC_RESPONSE_TIMEOUT_MS HOST_HANDSHAKE_RETRY_INTERVAL_MS
+#define TIME_SYNC_HOST_TIME_SIZE      8u
+#define TIME_SYNC_ACK_TIME_OFFSET     HOST_COMMAND_SIZE
 #define TIME_SYNC_SEND_TIME_OFFSET (TIME_SYNC_ACK_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define TIME_SYNC_TIME_FRAME_SIZE  (TIME_SYNC_SEND_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define UINT64_DECIMAL_TEXT_SIZE   21u
@@ -199,55 +201,10 @@ bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session)
         return true;
 }
 
-bool time_sync_send_start_ack(uint8_t* tx_frame, TimeSyncSession* session)
+TimeSyncResult time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
 {
         if (session->complete)
-                return false;
-
-        session->measurement = (TimeSyncMeasurement){.req_time = HAL_GetTick()};
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
-               FRAME_MESSAGE_TIME_SYNC_START_ACK,
-               sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
-        return send_host_frame(
-                tx_frame,
-                FRAME_TYPE_TIME_SYNC_START_ACK,
-                sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
-}
-
-bool time_sync_accept_time(
-        uint8_t*         tx_frame,
-        TimeSyncSession* session,
-        const uint8_t    payload[TIME_SYNC_PAYLOAD_SIZE],
-        uint32_t         receive_tick)
-{
-        if (session->complete)
-                return false;
-
-        uint64_t ack_time  = 0u;
-        uint64_t send_time = 0u;
-        for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
-                ack_time |= (uint64_t)payload[i] << (i * 8u);
-                send_time |= (uint64_t)payload[TIME_SYNC_HOST_TIME_SIZE + i] << (i * 8u);
-        }
-
-        session->measurement.res_time  = receive_tick;
-        session->measurement.ack_time  = ack_time;
-        session->measurement.send_time = send_time;
-        session->complete              = true;
-
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
-               FRAME_MESSAGE_TIME_ACK,
-               sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
-        return send_host_frame(
-                tx_frame,
-                FRAME_TYPE_TIME_ACK,
-                sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
-}
-
-bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
-{
-        if (session->complete)
-                return false;
+                return TIME_SYNC_FAILED;
 
         // prepare receive buffer
         uint8_t time_sync_start_frame[HOST_COMMAND_SIZE];
@@ -255,39 +212,101 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
         HAL_StatusTypeDef time_sync_start_status = HAL_UART_Receive(
                 &huart2,
                 time_sync_start_frame,
-                HOST_COMMAND_SIZE,
+                1u,
                 TIME_SYNC_RESPONSE_TIMEOUT_MS);
+        if (time_sync_start_status == HAL_OK)
+                time_sync_start_status = HAL_UART_Receive(
+                        &huart2,
+                        time_sync_start_frame + 1u,
+                        1u,
+                        TIME_SYNC_UART_TIMEOUT_MS);
         if (time_sync_start_status != HAL_OK)
-                return false;
+                return TIME_SYNC_FAILED;
+        // 起動途中のhandshakeは、受信済みと伝えて起動の先頭へ戻す。
+        if (memcmp(time_sync_start_frame,
+                   HOST_COMMANDS[HOST_COMMAND_HANDSHAKE],
+                   HOST_COMMAND_SIZE) == 0)
+                return TIME_SYNC_RESTART;
         // verify command if its time sync start
         if (memcmp(time_sync_start_frame,
                    HOST_COMMANDS[HOST_COMMAND_TIME_SYNC_START],
                    HOST_COMMAND_SIZE) != 0)
-                return false;
+                return TIME_SYNC_FAILED;
 
-        if (!time_sync_send_start_ack(tx_frame, session))
-                return false;
+        // prepare request time
+        uint32_t req_time = HAL_GetTick();
+
+        // prepare start ack message
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
+               FRAME_MESSAGE_TIME_SYNC_START_ACK,
+               sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
+
+        // send time sync start ack
+        if (!send_host_frame(
+                    tx_frame,
+                    FRAME_TYPE_TIME_SYNC_START_ACK,
+                    sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u))
+                return TIME_SYNC_FAILED;
 
         // receive time
         uint8_t           time_frame[TIME_SYNC_TIME_FRAME_SIZE];
-        HAL_StatusTypeDef receive_status = HAL_UART_Receive(
-                &huart2,
-                time_frame,
-                TIME_SYNC_TIME_FRAME_SIZE,
-                TIME_SYNC_RESPONSE_TIMEOUT_MS);
+        HAL_StatusTypeDef receive_status =
+                HAL_UART_Receive(&huart2, time_frame, 1u, TIME_SYNC_RESPONSE_TIMEOUT_MS);
+        if (receive_status == HAL_OK)
+                receive_status = HAL_UART_Receive(
+                        &huart2,
+                        time_frame + 1u,
+                        1u,
+                        TIME_SYNC_UART_TIMEOUT_MS);
         if (receive_status != HAL_OK)
-                return false;
+                return TIME_SYNC_FAILED;
 
-        // prepare response time
-        uint32_t res_time = HAL_GetTick();
+        // Timeの先頭2byteを先に調べ、handshakeを18byte待ちに巻き込まない。
+        if (memcmp(time_frame,
+                   HOST_COMMANDS[HOST_COMMAND_HANDSHAKE],
+                   HOST_COMMAND_SIZE) == 0)
+                return TIME_SYNC_RESTART;
 
         //  verify command if its time frame
         if (memcmp(time_frame, HOST_COMMANDS[HOST_COMMAND_TIME], HOST_COMMAND_SIZE) != 0)
-                return false;
+                return TIME_SYNC_FAILED;
 
-        return time_sync_accept_time(
-                tx_frame,
-                session,
+        receive_status = HAL_UART_Receive(
+                &huart2,
                 time_frame + HOST_COMMAND_SIZE,
-                res_time);
+                TIME_SYNC_TIME_FRAME_SIZE - HOST_COMMAND_SIZE,
+                TIME_SYNC_RESPONSE_TIMEOUT_MS);
+        if (receive_status != HAL_OK)
+                return TIME_SYNC_FAILED;
+        uint32_t res_time = HAL_GetTick();
+
+        // decode  host times
+        uint64_t ack_time  = 0u;
+        uint64_t send_time = 0u;
+        for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
+                ack_time |= (uint64_t)time_frame[TIME_SYNC_ACK_TIME_OFFSET + i]
+                            << (i * 8u);
+                send_time |= (uint64_t)time_frame[TIME_SYNC_SEND_TIME_OFFSET + i]
+                             << (i * 8u);
+        }
+
+        session->measurement = (TimeSyncMeasurement){
+                .req_time  = req_time,
+                .res_time  = res_time,
+                .ack_time  = ack_time,
+                .send_time = send_time,
+        };
+        session->complete = true;
+
+        // send time ack
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
+               FRAME_MESSAGE_TIME_ACK,
+               sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
+        if (!send_host_frame(
+                    tx_frame,
+                    FRAME_TYPE_TIME_ACK,
+                    sizeof(FRAME_MESSAGE_TIME_ACK) - 1u))
+                return TIME_SYNC_FAILED;
+
+        return TIME_SYNC_COMPLETE;
 }

@@ -4,10 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define TIME_SYNC_HOST_TIME_SIZE      8u
-#define TIME_SYNC_PAYLOAD_SIZE        (TIME_SYNC_HOST_TIME_SIZE * 2u)
-#define TIME_SYNC_RESPONSE_TIMEOUT_MS 3000u
-
 typedef struct
 {
         uint32_t req_time;  // HAL tick before the controller sends the start ACK.
@@ -28,15 +24,12 @@ bool time_sync_set_rtc(const TimeSyncSession* session);
 /** Send the measurement report and clear the completed session. */
 bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session);
 
-/* protocolがコマンドを受けた後、要求tickを記録して開始ACKを送る。 */
-bool time_sync_send_start_ack(uint8_t* tx_frame, TimeSyncSession* session);
-
-/* 受信済みの16byteを記録し、Time ACKを送る。受信処理はprotocolが管理する。 */
-bool time_sync_accept_time(
-        uint8_t*         tx_frame,
-        TimeSyncSession* session,
-        const uint8_t    payload[TIME_SYNC_PAYLOAD_SIZE],
-        uint32_t         receive_tick);
+typedef enum
+{
+        TIME_SYNC_FAILED,
+        TIME_SYNC_COMPLETE,
+        TIME_SYNC_RESTART,
+} TimeSyncResult;
 
 /**
  * Complete one time-sync measurement.
@@ -45,7 +38,8 @@ bool time_sync_accept_time(
  * bytes. The function receives `0xAA 0xA4`, sends the start ACK, then receives
  * and validates `0xAA 0xA5` plus the host ACK and send times. It records one
  * sample and sends the time ACK.
+ * handshake受信時はRESTARTを返し、呼び出し元に起動のやり直しを任せる。
  */
-bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session);
+TimeSyncResult time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session);
 
 #endif /* TIME_SYNC_H */
