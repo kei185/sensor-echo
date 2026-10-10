@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     src/lidar/parser/scan.c
     src/lidar/sys.c
     src/lidar/core.c
+    src/lidar/translate.c
     src/imu/sys.c
     src/imu/handler.c
     src/tx/frame.c

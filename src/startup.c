@@ -7,9 +7,9 @@
 #include "stm32f4xx_hal_uart.h"
 
 #include "startup.h"
-#include "protocol.h"
 #include "lidar/core.h"
 #include "lidar/sys.h"
+#include "lidar/translate.h"
 #include "tx/frame.h"
 #include "tx/header.h"
 
