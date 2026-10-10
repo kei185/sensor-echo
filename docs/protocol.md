@@ -8,8 +8,10 @@ TX slot ownership, queueing, and UART DMA dispatch are described in
 
 ## Connection and recovery
 
-The host starts a session with a handshake. If a protocol error occurs during
-startup or normal communication, both sides return to this stage.
+The host starts a session with a handshake. Firmware implements the startup flow
+and recovery from startup failures. Motor commands, soft reset, and recovery
+during normal communication are planned. The diagrams in this section show the
+full target protocol.
 
 ```mermaid
 flowchart TD
@@ -68,12 +70,70 @@ flowchart TD
 - Soft reset also returns to the handshake stage. The controller sends its
   reset ACK completely before restarting.
 
-These are protocol requirements; the new firmware handlers and recovery path
-are not implemented yet. The message bytes and startup order are defined in
+The message bytes and startup order are defined in
 [frame.md](frame.md#startup-sequence).
 
 A LiDAR RX overrun uses the local recovery below. It does not restart the host
 handshake when the stream parser can find a new valid packet.
+
+## Startup in current firmware
+
+```text
+                    Wait for handshake
+                             |
+                             v
+           Stop old LiDAR scan; clear startup state
+                             |
+                             v
+            HANDSHAKE ACK --> INITIALIZING
+                             |
+                             v
+       LiDAR info + health --> IMU setup --> READY
+                             |
+                             v
+    Time sync start --> Start ACK --> Time --> Time ACK
+                             |
+                             v
+                Set UTC RTC --> Time report
+                             |
+                             v
+               Start scan --> START SCAN ACK
+                             |
+                             v
+       Start RX DMA --> Start LiDAR --> Check descriptor
+                             |
+                             v
+                         Scan data
+
+    Any failed startup step
+              |
+              v
+    Stop LiDAR and RX DMA; clear RX and time-sync state
+              |
+              v
+    STARTUP FAILED, if UART can send it
+              |
+              +--------------------> Wait for handshake
+```
+
+A new handshake at any startup command-wait stage restarts initialization.
+Before the first handshake, unrelated bytes and commands are ignored.
+After it, an unexpected command or an incomplete frame fails startup.
+
+| Wait or transfer | Limit |
+| --- | ---: |
+| First byte while waiting for a handshake | No timeout |
+| First byte of the next startup command | 3 seconds |
+| Second command byte | 100 ms |
+| Time payload, 16 bytes | 3 seconds |
+| Blocking UART transmit or LiDAR reply | 100 ms |
+| Old LiDAR scan tail | 100 ms total; stop after 2 ms idle |
+| Scan descriptor and two more RX bytes | 100 ms |
+
+The two extra RX bytes keep the existing parser behind the DMA write position.
+Startup uses one free TX slot for blocking replies. It does not publish this
+slot to the TX queue. Failure discards the partial reply without advancing
+either TX queue head.
 
 ## Motor command and ACK
 

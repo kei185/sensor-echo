@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define TIME_SYNC_HOST_TIME_SIZE      8u
+#define TIME_SYNC_PAYLOAD_SIZE        (TIME_SYNC_HOST_TIME_SIZE * 2u)
+#define TIME_SYNC_RESPONSE_TIMEOUT_MS 3000u
+
 typedef struct
 {
         uint32_t req_time;  // HAL tick before the controller sends the start ACK.
@@ -23,6 +27,16 @@ bool time_sync_set_rtc(const TimeSyncSession* session);
 
 /** Send the measurement report and clear the completed session. */
 bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session);
+
+/* protocolがコマンドを受けた後、要求tickを記録して開始ACKを送る。 */
+bool time_sync_send_start_ack(uint8_t* tx_frame, TimeSyncSession* session);
+
+/* 受信済みの16byteを記録し、Time ACKを送る。受信処理はprotocolが管理する。 */
+bool time_sync_accept_time(
+        uint8_t*         tx_frame,
+        TimeSyncSession* session,
+        const uint8_t    payload[TIME_SYNC_PAYLOAD_SIZE],
+        uint32_t         receive_tick);
 
 /**
  * Complete one time-sync measurement.

@@ -7,8 +7,10 @@ The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
 Initialization starts after this exchange. For protocol errors and recovery,
 see [protocol.md](protocol.md#connection-and-recovery).
 
-Handshake, motor commands and ACKs, soft reset, and recovery are protocol
-requirements. Their firmware handlers are not implemented yet.
+Firmware implements handshake, startup, UTC time sync, scan start, and startup
+failure recovery. Motor commands, soft reset, and recovery during normal
+communication are planned. See [startup limits](protocol.md#startup-in-current-firmware)
+for receive timeouts.
 
 ```mermaid
 sequenceDiagram
@@ -20,6 +22,8 @@ sequenceDiagram
     loop Retry every 3 seconds until HANDSHAKE ACK arrives
         Host->>Controller: Handshake AA A0
         opt Controller receives the handshake
+            Controller->>LiDAR: Stop any previous scan A5 65
+            Controller->>Controller: Clear previous startup state
             Controller->>Host: HANDSHAKE ACK system frame
         end
     end
@@ -30,6 +34,7 @@ sequenceDiagram
     Controller->>LiDAR: Health status request A5 92
     LiDAR-->>Controller: Health status response
     Controller->>Host: Health status system frame
+    Controller->>Controller: Initialize IMU
     Controller->>Host: READY system frame
     Host->>Controller: Time sync start AA A4
     Controller->>Host: TIME SYNC START ACK
@@ -41,18 +46,22 @@ sequenceDiagram
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
     Controller->>LiDAR: Start scan command A5 60
+    LiDAR-->>Controller: Scan descriptor and first packet bytes
+    Controller->>Controller: Check scan descriptor
     LiDAR-->>Controller: Continuous scan stream
 ```
 
-The controller requests device information and health status while the LiDAR is
-idle. The LiDAR manual allows only the stop command during scanning. RX DMA
-starts before `A5 60`, so the controller can receive the first scan bytes.
+The controller stops any previous scan and discards remaining scan bytes before
+requesting device information and health status. The LiDAR manual allows only
+the stop command during scanning. RX DMA starts before `A5 60`, so the controller
+can receive the first scan bytes.
 The controller sends `START SCAN ACK` after it accepts the host command and
 before it starts RX DMA. The ACK confirms the host command only. It does not
 confirm DMA startup, the `A5 60` UART transfer, or a LiDAR response.
 
-If UART communication or reply validation fails, the controller sends a
-`STARTUP FAILED` system frame when possible and returns to the handshake stage.
+If UART communication, sensor initialization, RTC setup, or reply validation
+fails, the controller sends a `STARTUP FAILED` system frame when possible and
+returns to the handshake stage.
 The host retries the handshake, then repeats startup and time synchronization
 before starting a new scan.
 

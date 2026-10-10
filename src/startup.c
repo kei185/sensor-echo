@@ -1,74 +1,20 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "main.h"
 #include "stm32f4xx_hal_uart.h"
 
 #include "startup.h"
+#include "imu/handler.h"
 #include "lidar/core.h"
+#include "lidar/parser/meta.h"
 #include "lidar/sys.h"
 #include "lidar/translate.h"
-#include "tx/frame.h"
-#include "tx/header.h"
 
 #define STARTUP_UART_TIMEOUT_MS 100u
+#define STARTUP_RX_IDLE_MS      2u
 
-/**
- * @brief Build and send one system-message frame to the host.
- *
- * The payload is written after the reserved TX header area. The header is
- * filled in last so it contains the final payload length and timestamp.
- *
- * @param tx_frame Writable TX slot used for the complete host frame.
- * @param frame_type System-message type written into the host frame header.
- * @param message Fixed message written into the frame payload.
- * @param message_length Compile-time length of message, excluding its NUL byte.
- * @return true when the complete frame was sent to the host.
- */
-static bool send_host_system_message(
-        uint8_t*    tx_frame,
-        FrameType   frame_type,
-        const char* message,
-        uint16_t    message_length)
-{
-        // write message into the frame
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE, message, message_length);
-
-        // write header into the frame
-        size_t frame_length = tx_frame_write_header(
-                tx_frame,
-                CORE_TX_BUF_SIZE,
-                message_length,
-                frame_type,
-                HAL_GetTick());
-
-        if (frame_length == 0u)
-                return false;
-
-        HAL_StatusTypeDef transmit_status = HAL_UART_Transmit(
-                &huart2,
-                tx_frame,
-                (uint16_t)frame_length,
-                STARTUP_UART_TIMEOUT_MS);
-
-        return transmit_status == HAL_OK;
-}
-
-/**
- * @brief Check whether a blocking LiDAR response matches the sent command.
- *
- * A successful blocking UART receive guarantees that expected_reply_length
- * bytes arrived. This function then checks the LiDAR meta header, content
- * length, response mode, and type before the stream parser consumes it.
- *
- * @param reply Received LiDAR frame beginning with its meta header.
- * @param expected_reply_length Number of bytes requested from the UART.
- * @param expected_content_length Content size defined for the sent command.
- * @param expected_type Type code defined for the sent command.
- * @return true when the received meta header describes the expected response.
- */
 static bool is_expected_lidar_reply(
         const uint8_t* reply,
         size_t         expected_reply_length,
@@ -159,159 +105,79 @@ static bool request_and_forward_lidar_message(
         return forward_status == HAL_OK;
 }
 
-/**
- * @brief Wait until the host sends the command that permits scanning to start.
- *
- * Unknown two-byte commands are ignored. A UART receive failure stops startup.
- *
- * @return true after receiving the start-scan command.
- */
-static bool wait_for_start_scan(void)
+void startup_cancel(void)
 {
-        uint8_t command[HOST_COMMAND_SIZE];
-
-        // Startup remains blocking until the host sends the exact two-byte start command.
-        while (true) {
-                HAL_StatusTypeDef receive_status = HAL_UART_Receive(
-                        &huart2,
-                        command,
-                        HOST_COMMAND_SIZE,
-                        HAL_MAX_DELAY);
-
-                if (receive_status != HAL_OK)
-                        return false;
-
-                bool is_start_scan = memcmp(command,
-                                            HOST_COMMANDS[HOST_COMMAND_START_SCAN],
-                                            HOST_COMMAND_SIZE) == 0;
-
-                if (is_start_scan)
-                        return true;
-        }
+        // RX DMAを止めてから、LiDARにも停止コマンドを送る。
+        (void)HAL_UART_Abort(&huart4);
+        (void)HAL_UART_Transmit(
+                &huart4,
+                MSG[MSG_TYPE_STOP],
+                MSG_SIZE,
+                STARTUP_UART_TIMEOUT_MS);
+        __HAL_UART_CLEAR_OREFLAG(&huart4);
+        setup_blocking_rx(0u);
+        imu_accel_ready = imu_rot_ready = false;
 }
 
-/**
- * @brief Record a startup failure and report it to the host when possible.
- *
- * @param tx_frame Writable TX slot, or NULL when no slot was available.
- * @return false so callers can return this function directly.
- */
-static bool fail_startup(uint8_t* tx_frame)
+static bool drain_lidar_rx(void)
 {
-        HAL_GPIO_WritePin(
-                INITIAL_HANDSHAKE_FAILED_GPIO_Port,
-                INITIAL_HANDSHAKE_FAILED_Pin,
-                GPIO_PIN_SET);
-
-        if (tx_frame != NULL)
-                (void)send_host_system_message(
-                        tx_frame,
-                        FRAME_TYPE_STARTUP_FAILED,
-                        FRAME_MESSAGE_STARTUP_FAILED,
-                        sizeof(FRAME_MESSAGE_STARTUP_FAILED) - 1u);
+        uint32_t started = HAL_GetTick();
+        while (HAL_GetTick() - started < STARTUP_UART_TIMEOUT_MS) {
+                uint8_t           byte;
+                HAL_StatusTypeDef status =
+                        HAL_UART_Receive(&huart4, &byte, 1u, STARTUP_RX_IDLE_MS);
+                if (status == HAL_TIMEOUT)
+                        return true;
+                if (status != HAL_OK)
+                        return false;
+        }
         return false;
 }
 
-#include "time_sync.h"
-/**
- * @brief Complete the blocking handshake and start continuous LiDAR reception.
- *
- * The sequence reports initialization, forwards device information and health,
- * reports readiness, waits for host permission, acknowledges it, arms RX DMA,
- * and starts scanning. Any failed step sets the startup-failure pin and stops
- * the sequence.
- *
- * @return true after the ACK and LiDAR start-scan command are both sent.
- */
-bool run_startup_sequence(void)
+bool startup_initialize_sensors(uint8_t* tx_frame)
 {
-        // Startup owns this free slot until all blocking host transmissions finish.
-        TxBufSlot* tx_slot = get_empty_buf();
-        if (tx_slot == NULL)
-                return fail_startup(NULL);
-        uint8_t* tx_frame = tx_slot->_buf;
+        // 停止コマンドの後に残ったscanの末尾も、応答バッファへ混ぜない。
+        if (!drain_lidar_rx())
+                return false;
 
-        // /**
-        //  * send initializing message
-        //  */
-        // bool initializing_sent = send_host_system_message(
-        //         tx_frame,
-        //         FRAME_TYPE_INITIALIZING,
-        //         FRAME_MESSAGE_INITIALIZING,
-        //         sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
-        // if (!initializing_sent)
-        //         return fail_startup(tx_frame);
+        return request_and_forward_lidar_message(
+                       tx_frame,
+                       MSG_TYPE_RX_SYS_INFO,
+                       SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
+                       SYS_TYPE_CODE_DEVICE_INFO) &&
+               request_and_forward_lidar_message(
+                       tx_frame,
+                       MSG_TYPE_RX_HEALTH,
+                       SYS_PACKET_HEALTH_CONTENT_SIZE,
+                       SYS_TYPE_CODE_HEALTH) &&
+               imu_setup();
+}
 
-        // /**
-        //  * forward device info
-        //  */
-        // bool device_info_forwarded = request_and_forward_lidar_message(
-        //         tx_frame,
-        //         MSG_TYPE_RX_SYS_INFO,
-        //         SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
-        //         SYS_TYPE_CODE_DEVICE_INFO);
-        // if (!device_info_forwarded)
-        //         return fail_startup(tx_frame);
-
-        // /**
-        //  * forward health
-        //  */
-        // bool health_status_forwarded = request_and_forward_lidar_message(
-        //         tx_frame,
-        //         MSG_TYPE_RX_HEALTH,
-        //         SYS_PACKET_HEALTH_CONTENT_SIZE,
-        //         SYS_TYPE_CODE_HEALTH);
-        // if (!health_status_forwarded)
-        //         return fail_startup(tx_frame);
-
-        /**
-         * send ready
-         */
-        bool ready_sent = send_host_system_message(
-                tx_frame,
-                FRAME_TYPE_READY,
-                FRAME_MESSAGE_READY,
-                sizeof(FRAME_MESSAGE_READY) - 1u);
-        if (!ready_sent)
-                return fail_startup(tx_frame);
-
-        TimeSyncSession session         = {0};
-        uint8_t*        time_sync_frame = get_empty_buf()->_buf;
-        if (!time_sync_handle_start(time_sync_frame, &session))
-                Error_Handler();
-        if (!time_sync_set_rtc(&session))
-                Error_Handler();
-        if (!time_sync_send_report_if_ready(time_sync_frame, &session))
-                Error_Handler();
-
-        /**
-         * wait for start command from the host
-         */
-        bool start_scan_requested = wait_for_start_scan();
-        if (!start_scan_requested)
-                return fail_startup(tx_frame);
-
-        /**
-         * send ack for start scan command
-         */
-        bool start_scan_ack_sent = send_host_system_message(
-                tx_frame,
-                FRAME_TYPE_START_SCAN_ACK,
-                FRAME_MESSAGE_START_SCAN_ACK,
-                sizeof(FRAME_MESSAGE_START_SCAN_ACK) - 1u);
-        if (!start_scan_ack_sent)
-                return fail_startup(tx_frame);
-
-        // Arm RX before the scan command so the first scan bytes cannot be lost.
-        // set global buffer object
+bool startup_start_scan(void)
+{
+        // scanコマンドより先にDMAを動かして、descriptorと最初の点を受信する。
         setup_nonblocking_rx();
+        if (HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE) != HAL_OK)
+                return false;
+        if (HAL_UART_Transmit(
+                    &huart4,
+                    MSG[MSG_TYPE_SCAN],
+                    MSG_SIZE,
+                    STARTUP_UART_TIMEOUT_MS) != HAL_OK)
+                return false;
 
-        // setting dma peripheral
-        HAL_StatusTypeDef dma_start_status =
-                HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE);
+        // read_byte()の2byte分の余裕も揃えてから、固定長descriptorを解析する。
+        uint32_t started = HAL_GetTick();
+        while (CORE_RX_BUF_SIZE - *RX_BUF->remain_bytes < SYS_PACKET_META_SIZE + 2u) {
+                if (HAL_GetTick() - started >= STARTUP_UART_TIMEOUT_MS)
+                        return false;
+        }
 
-        if (dma_start_status != HAL_OK)
-                return fail_startup(tx_frame);
+        if (RX_BUF->_buf[0] != SYS_PACKET_HEADER_MSB ||
+            RX_BUF->_buf[1] != SYS_PACKET_HEADER_LSB)
+                return false;
 
-        return true;
+        ParserMeta meta = {0};
+        return read_meta(&meta) != NULL && meta.res_mode == SYS_RES_MODE_CONTINUOUS &&
+               meta.type_code == SYS_TYPE_CODE_SCAN;
 }

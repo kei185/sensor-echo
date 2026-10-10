@@ -1,5 +1,5 @@
-#ifndef STARTUP_TEST_STM32F4XX_HAL_UART_H
-#define STARTUP_TEST_STM32F4XX_HAL_UART_H
+#ifndef PROTOCOL_TEST_STM32F4XX_HAL_UART_H
+#define PROTOCOL_TEST_STM32F4XX_HAL_UART_H
 
 #include <stdint.h>
 
@@ -25,11 +25,9 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         uint32_t            timeout);
 HAL_StatusTypeDef HAL_UART_Receive(
         UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout);
-HAL_StatusTypeDef
-HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length);
 uint32_t HAL_GetTick(void);
 
 HAL_StatusTypeDef HAL_UART_Abort(UART_HandleTypeDef* huart);
 void              clear_uart_overrun(UART_HandleTypeDef* huart);
 #define __HAL_UART_CLEAR_OREFLAG(huart) clear_uart_overrun(huart)
-#endif /* STARTUP_TEST_STM32F4XX_HAL_UART_H */
+#endif /* PROTOCOL_TEST_STM32F4XX_HAL_UART_H */

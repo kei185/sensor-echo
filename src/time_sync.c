@@ -15,7 +15,6 @@
 #include "tx/header.h"
 
 #define TIME_SYNC_UART_TIMEOUT_MS  100u
-#define TIME_SYNC_HOST_TIME_SIZE   8u
 #define TIME_SYNC_ACK_TIME_OFFSET  HOST_COMMAND_SIZE
 #define TIME_SYNC_SEND_TIME_OFFSET (TIME_SYNC_ACK_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
 #define TIME_SYNC_TIME_FRAME_SIZE  (TIME_SYNC_SEND_TIME_OFFSET + TIME_SYNC_HOST_TIME_SIZE)
@@ -200,6 +199,51 @@ bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session)
         return true;
 }
 
+bool time_sync_send_start_ack(uint8_t* tx_frame, TimeSyncSession* session)
+{
+        if (session->complete)
+                return false;
+
+        session->measurement = (TimeSyncMeasurement){.req_time = HAL_GetTick()};
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
+               FRAME_MESSAGE_TIME_SYNC_START_ACK,
+               sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
+        return send_host_frame(
+                tx_frame,
+                FRAME_TYPE_TIME_SYNC_START_ACK,
+                sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
+}
+
+bool time_sync_accept_time(
+        uint8_t*         tx_frame,
+        TimeSyncSession* session,
+        const uint8_t    payload[TIME_SYNC_PAYLOAD_SIZE],
+        uint32_t         receive_tick)
+{
+        if (session->complete)
+                return false;
+
+        uint64_t ack_time  = 0u;
+        uint64_t send_time = 0u;
+        for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
+                ack_time |= (uint64_t)payload[i] << (i * 8u);
+                send_time |= (uint64_t)payload[TIME_SYNC_HOST_TIME_SIZE + i] << (i * 8u);
+        }
+
+        session->measurement.res_time  = receive_tick;
+        session->measurement.ack_time  = ack_time;
+        session->measurement.send_time = send_time;
+        session->complete              = true;
+
+        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
+               FRAME_MESSAGE_TIME_ACK,
+               sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
+        return send_host_frame(
+                tx_frame,
+                FRAME_TYPE_TIME_ACK,
+                sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
+}
+
 bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
 {
         if (session->complete)
@@ -212,7 +256,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                 &huart2,
                 time_sync_start_frame,
                 HOST_COMMAND_SIZE,
-                HAL_MAX_DELAY);
+                TIME_SYNC_RESPONSE_TIMEOUT_MS);
         if (time_sync_start_status != HAL_OK)
                 return false;
         // verify command if its time sync start
@@ -221,19 +265,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                    HOST_COMMAND_SIZE) != 0)
                 return false;
 
-        // prepare request time
-        uint32_t req_time = HAL_GetTick();
-
-        // prepare start ack message
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
-               FRAME_MESSAGE_TIME_SYNC_START_ACK,
-               sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u);
-
-        // send time sync start ack
-        if (!send_host_frame(
-                    tx_frame,
-                    FRAME_TYPE_TIME_SYNC_START_ACK,
-                    sizeof(FRAME_MESSAGE_TIME_SYNC_START_ACK) - 1u))
+        if (!time_sync_send_start_ack(tx_frame, session))
                 return false;
 
         // receive time
@@ -242,7 +274,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                 &huart2,
                 time_frame,
                 TIME_SYNC_TIME_FRAME_SIZE,
-                HAL_MAX_DELAY);
+                TIME_SYNC_RESPONSE_TIMEOUT_MS);
         if (receive_status != HAL_OK)
                 return false;
 
@@ -253,33 +285,9 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
         if (memcmp(time_frame, HOST_COMMANDS[HOST_COMMAND_TIME], HOST_COMMAND_SIZE) != 0)
                 return false;
 
-        // decode  host times
-        uint64_t ack_time  = 0u;
-        uint64_t send_time = 0u;
-        for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
-                ack_time |= (uint64_t)time_frame[TIME_SYNC_ACK_TIME_OFFSET + i]
-                            << (i * 8u);
-                send_time |= (uint64_t)time_frame[TIME_SYNC_SEND_TIME_OFFSET + i]
-                             << (i * 8u);
-        }
-
-        session->measurement = (TimeSyncMeasurement){
-                .req_time  = req_time,
-                .res_time  = res_time,
-                .ack_time  = ack_time,
-                .send_time = send_time,
-        };
-        session->complete = true;
-
-        // send time ack
-        memcpy(tx_frame + TX_FRAME_HEADER_SIZE,
-               FRAME_MESSAGE_TIME_ACK,
-               sizeof(FRAME_MESSAGE_TIME_ACK) - 1u);
-        if (!send_host_frame(
-                    tx_frame,
-                    FRAME_TYPE_TIME_ACK,
-                    sizeof(FRAME_MESSAGE_TIME_ACK) - 1u))
-                return false;
-
-        return true;
+        return time_sync_accept_time(
+                tx_frame,
+                session,
+                time_frame + HOST_COMMAND_SIZE,
+                res_time);
 }

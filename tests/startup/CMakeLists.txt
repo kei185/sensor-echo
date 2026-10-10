@@ -12,15 +12,11 @@ add_executable(startup_test
     startup_test.c
     ../../src/startup.c
     ../../src/lidar/sys.c
-    ../../src/tx/frame.c
-    ../../src/tx/header.c
-    ../../lib/libcrc-2.0/src/crc8.c
 )
 
 target_include_directories(startup_test PRIVATE
     stubs
     ../../src
-    ../../lib/libcrc-2.0/include
 )
 
 target_compile_options(startup_test PRIVATE

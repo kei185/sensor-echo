@@ -26,6 +26,7 @@ static uint8_t         event_count;
 static uint8_t         receive_count;
 static uint32_t        fake_tick;
 static bool            invalid_time_command;
+static uint16_t        timeout_receive_size;
 static char            report_payload[CORE_TX_BUF_SIZE - TX_FRAME_HEADER_SIZE + 1u];
 static size_t          report_length;
 static RTC_DateTypeDef set_date;
@@ -51,6 +52,7 @@ static void reset_uart_state(void)
         receive_count        = 0u;
         fake_tick            = 1000u;
         invalid_time_command = false;
+        timeout_receive_size = 0u;
         memset(report_payload, 0, sizeof(report_payload));
         report_length = 0u;
         memset(&set_date, 0, sizeof(set_date));
@@ -122,7 +124,9 @@ HAL_StatusTypeDef HAL_UART_Receive(
         UART_HandleTypeDef* huart, uint8_t* data, uint16_t length, uint32_t timeout)
 {
         assert(huart == &huart2);
-        assert(timeout == HAL_MAX_DELAY);
+        assert(timeout == TIME_SYNC_RESPONSE_TIMEOUT_MS);
+        if (length == timeout_receive_size)
+                return HAL_TIMEOUT;
 
         if (length == HOST_COMMAND_SIZE) {
                 memcpy(data,
@@ -276,12 +280,29 @@ static void handler_rejects_a_time_frame_with_the_wrong_command(void)
         assert(!session.complete);
 }
 
+static void handler_returns_when_either_host_frame_times_out(void)
+{
+        const uint16_t lengths[] = {HOST_COMMAND_SIZE,
+                                    HOST_COMMAND_SIZE + TIME_SYNC_PAYLOAD_SIZE};
+        for (size_t i = 0u; i < sizeof(lengths) / sizeof(lengths[0]); ++i) {
+                reset_uart_state();
+                timeout_receive_size                       = lengths[i];
+                TimeSyncSession session                    = {0};
+                uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
+                // コマンド待ち・payload待ちの両方で、未完了のまま呼び出し元へ戻る。
+                assert(!time_sync_handle_start(tx_frame, &session));
+                assert(!session.complete);
+                assert(event_count == i);
+        }
+}
+
 int main(void)
 {
         time_sync_start_command_has_the_documented_bytes();
         handler_collects_and_reports_one_measurement();
         handler_reports_round_trip_across_tick_wrap();
         handler_rejects_a_time_frame_with_the_wrong_command();
+        handler_returns_when_either_host_frame_times_out();
         rtc_uses_network_delay_and_elapsed_time();
         rtc_rejects_an_impossible_host_interval();
         return 0;
