@@ -231,6 +231,28 @@ bool run_startup_sequence(void)
                 return fail_startup(NULL);
         uint8_t* tx_frame = tx_slot->_buf;
 
+        // hostが3秒ごとに送るhandshakeを待つ。それ以外のコマンドでは進まない。
+        uint8_t command[HOST_COMMAND_SIZE];
+        do {
+                HAL_StatusTypeDef receive_status = HAL_UART_Receive(
+                        &huart2,
+                        command,
+                        HOST_COMMAND_SIZE,
+                        HAL_MAX_DELAY);
+                if (receive_status != HAL_OK)
+                        return fail_startup(tx_frame);
+        } while (memcmp(command,
+                        HOST_COMMANDS[HOST_COMMAND_HANDSHAKE],
+                        HOST_COMMAND_SIZE) != 0);
+
+        // ACKを送れたら、既存の起動処理を続ける。
+        if (!send_host_system_message(
+                    tx_frame,
+                    FRAME_TYPE_HANDSHAKE_ACK,
+                    FRAME_MESSAGE_HANDSHAKE_ACK,
+                    sizeof(FRAME_MESSAGE_HANDSHAKE_ACK) - 1u))
+                return fail_startup(tx_frame);
+
         // /**
         //  * send initializing message
         //  */
@@ -278,11 +300,11 @@ bool run_startup_sequence(void)
         TimeSyncSession session         = {0};
         uint8_t*        time_sync_frame = get_empty_buf()->_buf;
         if (!time_sync_handle_start(time_sync_frame, &session))
-                Error_Handler();
+                return fail_startup(tx_frame);
         if (!time_sync_set_rtc(&session))
-                Error_Handler();
+                return fail_startup(tx_frame);
         if (!time_sync_send_report_if_ready(time_sync_frame, &session))
-                Error_Handler();
+                return fail_startup(tx_frame);
 
         /**
          * wait for start command from the host
