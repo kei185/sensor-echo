@@ -8,6 +8,7 @@
 
 #include "startup.h"
 #include "lidar/core.h"
+#include "lidar/frequency.h"
 #include "lidar/sys.h"
 #include "lidar/translate.h"
 #include "tx/frame.h"
@@ -285,6 +286,10 @@ bool run_startup_sequence(void)
         //         SYS_TYPE_CODE_HEALTH);
         // if (!health_status_forwarded)
         //         return fail_startup(tx_frame);
+
+        // 周波数コマンドはscan開始前に送る。10 HzにできなければREADYへ進まない。
+        if (!lidar_set_scan_frequency(10u))
+                return fail_startup(tx_frame);
 
         /**
          * send ready
