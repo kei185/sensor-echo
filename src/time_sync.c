@@ -33,6 +33,52 @@ typedef struct
         uint16_t        millisecond;
 } RtcCalendar;
 
+uint64_t time_sync_get_unix_time_ms(void)
+{
+        RTC_TimeTypeDef time;
+        RTC_DateTypeDef date;
+
+        // 時刻の後に日付を読み、RTCのshadow registerを解放する。
+        if (HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN) != HAL_OK ||
+            HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN) != HAL_OK)
+                return 0u;
+
+        static const uint16_t days_before_month[] = {
+                0u,
+                0u,
+                31u,
+                59u,
+                90u,
+                120u,
+                151u,
+                181u,
+                212u,
+                243u,
+                273u,
+                304u,
+                334u,
+        };
+        // RTCのYearは2000年からの年数。時刻設定と同じ2000～2099年を扱う。
+        uint32_t year = date.Year;
+        // 1970～1999年の10957日に、経過年・閏日・年内の経過日を足す。
+        uint32_t days = 10957u + year * 365u + (year + 3u) / 4u +
+                        days_before_month[date.Month] + date.Date - 1u;
+        if (date.Month > 2u && year % 4u == 0u)
+                ++days;
+
+        uint64_t unix_seconds =
+                (((uint64_t)days * 24u + time.Hours) * 60u + time.Minutes) * 60u +
+                time.Seconds;
+        // RTCの時刻補正直後は、subsecondのカウンタが1秒分を超えることがある。
+        if (time.SubSeconds > time.SecondFraction) {
+                --unix_seconds;
+                time.SubSeconds -= time.SecondFraction + 1u;
+        }
+        uint32_t milliseconds = (time.SecondFraction - time.SubSeconds) * 1000u /
+                                (time.SecondFraction + 1u);
+        return unix_seconds * UNIX_MILLISECONDS_PER_SECOND + milliseconds;
+}
+
 static bool
 send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
 {
@@ -41,7 +87,7 @@ send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
                 CORE_TX_BUF_SIZE,
                 (uint16_t)payload_length,
                 frame_type,
-                HAL_GetTick());
+                time_sync_get_unix_time_ms());
         if (frame_length == 0u)
                 return false;
 

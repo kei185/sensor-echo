@@ -10,7 +10,7 @@ size_t tx_frame_write_header(
         size_t    tx_buf_capacity,
         uint16_t  payload_len,
         FrameType type,
-        uint32_t  timestamp)
+        uint64_t  timestamp)
 {
         if (tx_buf == NULL || tx_buf_capacity < TX_FRAME_HEADER_SIZE ||
             payload_len > tx_buf_capacity - TX_FRAME_HEADER_SIZE)
@@ -28,6 +28,10 @@ size_t tx_frame_write_header(
         tx_buf[7]                   = (uint8_t)(timestamp >> 8);
         tx_buf[8]                   = (uint8_t)(timestamp >> 16);
         tx_buf[9]                   = (uint8_t)(timestamp >> 24);
+        tx_buf[10]                  = (uint8_t)(timestamp >> 32);
+        tx_buf[11]                  = (uint8_t)(timestamp >> 40);
+        tx_buf[12]                  = (uint8_t)(timestamp >> 48);
+        tx_buf[13]                  = (uint8_t)(timestamp >> 56);
 
         // NOTE: Extend coverage to the whole frame if the scan-time budget allows it.
         // uint8_t crc = crc_8(tx_buf, TX_FRAME_CRC_OFFSET);

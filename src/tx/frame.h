@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define SOF_SIZE             2u
-#define TX_FRAME_HEADER_SIZE 10u
+#define TX_FRAME_HEADER_SIZE 14u
 #define TX_FRAME_CAPACITY    1344u
 
 #define WHEEL_ROTATION_Q6_SCALE    64u

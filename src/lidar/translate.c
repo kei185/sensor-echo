@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "main.h"
+#include "time_sync.h"
 
 #include "lidar/translate.h"
 #include "lidar/core.h"
@@ -117,7 +118,7 @@ size_t translate_scan_frame(uint8_t* to)
                 CORE_TX_BUF_SIZE,
                 (uint16_t)payload_length,
                 FRAME_TYPE_LIDAR,
-                HAL_GetTick());
+                time_sync_get_unix_time_ms());
 }
 
 /**
@@ -158,5 +159,5 @@ size_t translate_single(uint8_t* to)
                 CORE_TX_BUF_SIZE,
                 (uint16_t)payload_length,
                 frame_type,
-                HAL_GetTick());
+                time_sync_get_unix_time_ms());
 }

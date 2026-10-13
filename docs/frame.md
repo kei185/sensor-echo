@@ -183,7 +183,7 @@ the host clock moves backwards or `host_processing` is longer than
 prescaler resolution.
 
 # Tx Frame
-|Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (32bit) |  payload   | 
+|Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (64bit) |  payload   |
 |---| ---|---|---|---|---|
 |0xAA55|-|-| 0x01  Lidar |-| point data| 
 |0xAA55|-|-| 0x02  IMU | -|kinematic data| 
@@ -201,18 +201,28 @@ prescaler resolution.
 |0xAA55|-|-| 0x0E  Motor command acknowledged |-| `MOTOR ACK` |
 |0xAA55|-|-| 0x0F  Soft reset acknowledged |-| `SOFT RESET ACK` |
 
-The header is 10 bytes. The start-of-frame marker is the fixed byte sequence
+The header is 14 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
-at `tx_buf + 10`, so it can be written before the header. Payload length counts
+at `tx_buf + 14`, so it can be written before the header. Payload length counts
 payload bytes only. These frames travel from controller to host. The timestamp
-is the controller's millisecond tick when the frame is built; it is not a Unix
-timestamp. CRC and type are one byte each and therefore have no byte order.
+is unsigned 64-bit Unix time in milliseconds (UTC), read from the RTC when the
+frame is built. Frames sent before time synchronization use the RTC's current
+value. CRC and type are one byte each and therefore have no byte order.
+
+| Byte offset | Size | Field |
+|---:|---:|---|
+| `0` | 2 bytes | Start of frame: `AA 55` |
+| `2` | 2 bytes | Payload length |
+| `4` | 1 byte | CRC |
+| `5` | 1 byte | Type |
+| `6` | 8 bytes | Unix timestamp in milliseconds |
+| `14` | Payload length | Payload |
 
 ### System Message
 
 System message types start at `0x04`; type `0x00` is not used. Their payloads are
 ASCII text without a line terminator or NUL byte. The payload starts immediately
-after the 10-byte TX header. The header payload length marks the message end.
+after the 14-byte TX header. The header payload length marks the message end.
 
 | Type | Event | Host system message payload |
 |---|---|---|
