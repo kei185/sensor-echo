@@ -208,8 +208,8 @@ CRC covers only the two payload-length bytes.
 
 At a 6 Hz scan rate, one rotation carries about 667 points. Its host
 point payload is about 2667 bytes, while the UART can send 3840 bytes in the
-same interval. This leaves about 1173 bytes for 10-byte host headers, or a
-theoretical maximum of 117 LiDAR packets per rotation. Actual packet count and
+same interval. This leaves about 1173 bytes for 14-byte host headers, or a
+theoretical maximum of 83 LiDAR packets per rotation. Actual packet count and
 TX queue occupancy must be measured before using this limit.
 
 For TX queue capacity and lifecycle, see [tx.md](tx.md). For host commands and

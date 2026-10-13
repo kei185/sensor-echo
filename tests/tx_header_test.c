@@ -27,7 +27,7 @@ static void test_libcrc_check_value(void)
  */
 static void test_complete_frame(void)
 {
-        // Reserve ten bytes for the header; place the payload after that space.
+        // 14バイトのヘッダ領域を確保し、その直後へpayloadを書く。
         uint8_t frame[TX_FRAME_HEADER_SIZE + 3u] = {0};
         frame[TX_FRAME_HEADER_SIZE]              = 0x01u;
         frame[TX_FRAME_HEADER_SIZE + 1u]         = 0x02u;
@@ -38,7 +38,7 @@ static void test_complete_frame(void)
                 sizeof(frame),
                 3u,
                 FRAME_TYPE_LIDAR,
-                0x12345678u);
+                UINT64_C(0x123456789abcdef0));
         // Length 0x0003 is sent as 03 00 and has libcrc CRC 0x2D.
         const uint8_t expected[] = {0xaau,
                                     0x55u,
@@ -46,6 +46,10 @@ static void test_complete_frame(void)
                                     0x00u,
                                     0x2du,
                                     0x01u,
+                                    0xf0u,
+                                    0xdeu,
+                                    0xbcu,
+                                    0x9au,
                                     0x78u,
                                     0x56u,
                                     0x34u,
@@ -54,7 +58,7 @@ static void test_complete_frame(void)
                                     0x02u,
                                     0x03u};
 
-        // The DMA must send the ten-byte header and all three payload bytes.
+        // DMAへ渡す長さは、14バイトのヘッダとpayload全体を含む。
         assert(size == sizeof(expected));
         // This also checks that header generation did not modify the payload.
         assert(memcmp(frame, expected, sizeof(expected)) == 0);
@@ -89,6 +93,11 @@ static void test_multibyte_length(void)
         assert(frame[7] == 0xcdu);
         assert(frame[8] == 0xabu);
         assert(frame[9] == 0x89u);
+        // 32bitに収まる値でも、timestampの上位4バイトを0で埋める。
+        assert(frame[10] == 0x00u);
+        assert(frame[11] == 0x00u);
+        assert(frame[12] == 0x00u);
+        assert(frame[13] == 0x00u);
         // Both ends of the already-written payload must remain in place.
         assert(frame[TX_FRAME_HEADER_SIZE] == 0x00u);
         assert(frame[sizeof(frame) - 1u] == 0x01u);
@@ -105,7 +114,7 @@ static void test_empty_payload(void)
                 FRAME_TYPE_INITIALIZING,
                 0u);
 
-        // No payload bytes are sent, but the complete ten-byte header is sent.
+        // payloadがなくても、14バイトのヘッダ全体を送る。
         assert(size == sizeof(frame));
         // 初期化開始メッセージはsystem messageの先頭typeである0x04を使う。
         assert(frame[5] == 0x04u);

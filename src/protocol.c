@@ -7,6 +7,7 @@
 #include "arbiter.h"
 #include "protocol.h"
 #include "startup.h"
+#include "time_sync.h"
 #include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_def.h"
 #include "tx/frame.h"
@@ -76,7 +77,7 @@ void loop()
                                 CORE_TX_BUF_SIZE,
                                 IMU_BUF_SIZE,
                                 FRAME_TYPE_IMU,
-                                HAL_GetTick());
+                                time_sync_get_unix_time_ms());
 
                         if (len == 0)
                                 continue;

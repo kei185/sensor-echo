@@ -7,6 +7,7 @@
 #include "stm32f4xx_hal_uart.h"
 
 #include "startup.h"
+#include "time_sync.h"
 #include "lidar/core.h"
 #include "lidar/sys.h"
 #include "lidar/translate.h"
@@ -42,7 +43,7 @@ static bool send_host_system_message(
                 CORE_TX_BUF_SIZE,
                 message_length,
                 frame_type,
-                HAL_GetTick());
+                time_sync_get_unix_time_ms());
 
         if (frame_length == 0u)
                 return false;
@@ -212,7 +213,6 @@ static bool fail_startup(uint8_t* tx_frame)
         return false;
 }
 
-#include "time_sync.h"
 /**
  * @brief Complete the blocking handshake and start continuous LiDAR reception.
  *

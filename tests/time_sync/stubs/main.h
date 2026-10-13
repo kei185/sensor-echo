@@ -46,6 +46,10 @@ HAL_StatusTypeDef
 HAL_RTC_SetDate(RTC_HandleTypeDef* handle, RTC_DateTypeDef* date, uint32_t format);
 HAL_StatusTypeDef
 HAL_RTC_SetTime(RTC_HandleTypeDef* handle, RTC_TimeTypeDef* time, uint32_t format);
+HAL_StatusTypeDef
+HAL_RTC_GetDate(RTC_HandleTypeDef* handle, RTC_DateTypeDef* date, uint32_t format);
+HAL_StatusTypeDef
+HAL_RTC_GetTime(RTC_HandleTypeDef* handle, RTC_TimeTypeDef* time, uint32_t format);
 HAL_StatusTypeDef HAL_RTCEx_SetSynchroShift(
         RTC_HandleTypeDef* handle, uint32_t add_one_second, uint32_t subtract_fraction);
 

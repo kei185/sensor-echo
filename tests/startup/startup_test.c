@@ -187,7 +187,7 @@ HAL_StatusTypeDef HAL_UART_Receive(
         return HAL_OK;
 }
 
-uint32_t HAL_GetTick(void) { return 1234u; }
+uint64_t time_sync_get_unix_time_ms(void) { return UINT64_C(1791160123000); }
 
 TxBufSlot* get_empty_buf(void) { return &startup_slot; }
 

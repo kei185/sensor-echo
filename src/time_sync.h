@@ -21,6 +21,9 @@ typedef struct
 /** Set the RTC from a complete time-sync exchange. */
 bool time_sync_set_rtc(const TimeSyncSession* session);
 
+/** RTCのUTC日時をUnixミリ秒で返す。読み取りに失敗した場合は0。 */
+uint64_t time_sync_get_unix_time_ms(void);
+
 /** Send the measurement report and clear the completed session. */
 bool time_sync_send_report_if_ready(uint8_t* tx_frame, TimeSyncSession* session);
 

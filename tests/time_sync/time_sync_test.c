@@ -22,6 +22,7 @@ typedef enum
 #define EVENT_CAPACITY 3u
 
 static Event           events[EVENT_CAPACITY];
+static uint64_t        frame_timestamps[EVENT_CAPACITY];
 static uint8_t         event_count;
 static uint8_t         receive_count;
 static uint32_t        fake_tick;
@@ -35,6 +36,8 @@ static uint32_t        shift_subtract_fraction;
 static uint8_t         rtc_set_date_count;
 static uint8_t         rtc_set_time_count;
 static uint8_t         rtc_shift_count;
+static bool            rtc_time_was_read;
+static bool            rtc_read_fails;
 
 static bool
 payload_equals(const uint8_t* frame, uint16_t frame_length, const char* message)
@@ -47,22 +50,48 @@ payload_equals(const uint8_t* frame, uint16_t frame_length, const char* message)
 static void reset_uart_state(void)
 {
         memset(events, 0, sizeof(events));
+        memset(frame_timestamps, 0, sizeof(frame_timestamps));
         event_count          = 0u;
         receive_count        = 0u;
         fake_tick            = 1000u;
         invalid_time_command = false;
         memset(report_payload, 0, sizeof(report_payload));
         report_length = 0u;
-        memset(&set_date, 0, sizeof(set_date));
-        memset(&set_time, 0, sizeof(set_time));
+        set_date      = (RTC_DateTypeDef){.Month = 1u, .Date = 1u};
+        set_time      = (RTC_TimeTypeDef){.SubSeconds = 255u, .SecondFraction = 255u};
         shift_add_one_second    = 0u;
         shift_subtract_fraction = 0u;
         rtc_set_date_count      = 0u;
         rtc_set_time_count      = 0u;
         rtc_shift_count         = 0u;
+        rtc_time_was_read       = false;
+        rtc_read_fails          = false;
 }
 
 uint32_t HAL_GetTick(void) { return fake_tick++; }
+
+HAL_StatusTypeDef
+HAL_RTC_GetTime(RTC_HandleTypeDef* handle, RTC_TimeTypeDef* time, uint32_t format)
+{
+        assert(handle == &hrtc);
+        assert(format == RTC_FORMAT_BIN);
+        assert(!rtc_time_was_read);
+        *time             = set_time;
+        rtc_time_was_read = true;
+        return HAL_OK;
+}
+
+HAL_StatusTypeDef
+HAL_RTC_GetDate(RTC_HandleTypeDef* handle, RTC_DateTypeDef* date, uint32_t format)
+{
+        assert(handle == &hrtc);
+        assert(format == RTC_FORMAT_BIN);
+        // 時刻の後に日付を読み、次のRTC読み取りへ進めることを確認する。
+        assert(rtc_time_was_read);
+        rtc_time_was_read = false;
+        *date             = set_date;
+        return rtc_read_fails ? HAL_ERROR : HAL_OK;
+}
 
 HAL_StatusTypeDef
 HAL_RTC_SetDate(RTC_HandleTypeDef* handle, RTC_DateTypeDef* date, uint32_t format)
@@ -100,6 +129,10 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         assert(huart == &huart2);
         assert(timeout == 100u);
         assert(event_count < EVENT_CAPACITY);
+
+        // ヘッダの8バイトを読み、HAL tickではなくUnix時刻が届くか調べる。
+        for (size_t i = 0u; i < sizeof(uint64_t); ++i)
+                frame_timestamps[event_count] |= (uint64_t)data[6u + i] << (8u * i);
 
         if (payload_equals(data, length, FRAME_MESSAGE_TIME_SYNC_START_ACK)) {
                 assert(data[5] == FRAME_TYPE_TIME_SYNC_START_ACK);
@@ -181,15 +214,17 @@ static void handler_collects_and_reports_one_measurement(void)
         assert(!session.complete);
         assert(report_length == strlen(report_payload));
         assert(strstr(report_payload,
-                      "#1 req_tick=1000 ms res_tick=1002 ms round_trip=2 ms "
+                      "#1 req_tick=1000 ms res_tick=1001 ms round_trip=1 ms "
                       "ack_time=1791160123000 ms send_time=1791160123001 ms") != NULL);
+        for (size_t i = 0u; i < EVENT_CAPACITY; ++i)
+                assert(frame_timestamps[i] == UINT64_C(946684800000));
 }
 
 static void handler_reports_round_trip_across_tick_wrap(void)
 {
         // 準備: 1件目のreqとresの間でHAL tickをwrapさせる。
         reset_uart_state();
-        fake_tick                                  = UINT32_MAX - 1u;
+        fake_tick                                  = UINT32_MAX;
         TimeSyncSession session                    = {0};
         uint8_t         tx_frame[CORE_TX_BUF_SIZE] = {0};
 
@@ -199,7 +234,72 @@ static void handler_reports_round_trip_across_tick_wrap(void)
 
         // 検証: unsigned tick差分なら1回のwrapをまたいでも経過時間を得られる。
         assert(strstr(report_payload,
-                      "#1 req_tick=4294967294 ms res_tick=0 ms round_trip=2 ms") != NULL);
+                      "#1 req_tick=4294967295 ms res_tick=0 ms round_trip=1 ms") != NULL);
+}
+
+static void rtc_returns_unix_milliseconds(void)
+{
+        // 準備: RTCが表せる2000年の先頭を使う。
+        reset_uart_state();
+        assert(time_sync_get_unix_time_ms() == UINT64_C(946684800000));
+
+        // 閏日のUTC日時と、subsecondの192/256秒を変換する。
+        set_date = (RTC_DateTypeDef){.Year = 24u, .Month = 2u, .Date = 29u};
+        set_time = (RTC_TimeTypeDef){
+                .Hours          = 12u,
+                .Minutes        = 34u,
+                .Seconds        = 56u,
+                .SubSeconds     = 63u,
+                .SecondFraction = 255u,
+        };
+        assert(time_sync_get_unix_time_ms() == UINT64_C(1709210096750));
+
+        // 閏日の次の月にも、1日分の補正が反映されることを確認する。
+        set_date.Month = 3u;
+        set_date.Date  = 1u;
+        set_time       = (RTC_TimeTypeDef){.SubSeconds = 255u, .SecondFraction = 255u};
+        assert(time_sync_get_unix_time_ms() == UINT64_C(1709251200000));
+
+        // 2038年のsigned 32bit秒の範囲を超えてもUnixミリ秒を保つ。
+        set_date = (RTC_DateTypeDef){.Year = 38u, .Month = 1u, .Date = 19u};
+        set_time = (RTC_TimeTypeDef){
+                .Hours          = 3u,
+                .Minutes        = 14u,
+                .Seconds        = 8u,
+                .SubSeconds     = 255u,
+                .SecondFraction = 255u,
+        };
+        assert(time_sync_get_unix_time_ms() == UINT64_C(2147483648000));
+
+        // RTC設定の上限である2099年末も、UTC日時のまま扱う。
+        set_date = (RTC_DateTypeDef){.Year = 99u, .Month = 12u, .Date = 31u};
+        set_time = (RTC_TimeTypeDef){
+                .Hours          = 23u,
+                .Minutes        = 59u,
+                .Seconds        = 59u,
+                .SubSeconds     = 0u,
+                .SecondFraction = 255u,
+        };
+        assert(time_sync_get_unix_time_ms() == UINT64_C(4102444799996));
+}
+
+static void rtc_handles_subseconds_after_a_shift(void)
+{
+        // 準備: 1秒進めてから1/4秒を差し引いた直後のRTC値を作る。
+        reset_uart_state();
+        set_time.Seconds    = 1u;
+        set_time.SubSeconds = 319u;
+
+        // 検証: カウンタが255を超えていても、00:00:00.750と解釈する。
+        assert(time_sync_get_unix_time_ms() == UINT64_C(946684800750));
+}
+
+static void rtc_returns_zero_on_read_failure(void)
+{
+        reset_uart_state();
+        rtc_read_fails = true;
+        assert(time_sync_get_unix_time_ms() == 0u);
+        assert(!rtc_time_was_read);
 }
 
 static void rtc_uses_network_delay_and_elapsed_time(void)
@@ -284,5 +384,8 @@ int main(void)
         handler_rejects_a_time_frame_with_the_wrong_command();
         rtc_uses_network_delay_and_elapsed_time();
         rtc_rejects_an_impossible_host_interval();
+        rtc_returns_unix_milliseconds();
+        rtc_handles_subseconds_after_a_shift();
+        rtc_returns_zero_on_read_failure();
         return 0;
 }
