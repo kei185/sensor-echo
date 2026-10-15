@@ -46,6 +46,8 @@ RTC_HandleTypeDef hrtc;
 SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
@@ -65,6 +67,8 @@ static void MX_TIM2_Init(void);
 static void MX_UART4_Init(void);
 static void MX_RTC_Init(void);
 static void MX_SPI2_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -109,6 +113,8 @@ int main(void)
         MX_UART4_Init();
         MX_RTC_Init();
         MX_SPI2_Init();
+        MX_TIM3_Init();
+        MX_TIM4_Init();
         /* USER CODE BEGIN 2 */
 
         /* USER CODE END 2 */
@@ -202,8 +208,12 @@ static void MX_RTC_Init(void)
 
         /* USER CODE END RTC_Init 2 */
 }
+
 /**
-@brief SPI2 Initialization Function * @param None * @retval None */
+ * @brief SPI2 Initialization Function
+ * @param None
+ * @retval None
+ */
 static void MX_SPI2_Init(void)
 {
 
@@ -275,6 +285,98 @@ static void MX_TIM2_Init(void)
         HAL_TIM_Base_Start_IT(&htim2);
 
         /* USER CODE END TIM2_Init 2 */
+}
+
+/**
+ * @brief TIM3 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_TIM3_Init(void)
+{
+
+        /* USER CODE BEGIN TIM3_Init 0 */
+
+        /* USER CODE END TIM3_Init 0 */
+
+        TIM_Encoder_InitTypeDef sConfig       = {0};
+        TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+        /* USER CODE BEGIN TIM3_Init 1 */
+
+        /* USER CODE END TIM3_Init 1 */
+        htim3.Instance               = TIM3;
+        htim3.Init.Prescaler         = 0;
+        htim3.Init.CounterMode       = TIM_COUNTERMODE_UP;
+        htim3.Init.Period            = 27999;
+        htim3.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
+        htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+        sConfig.EncoderMode          = TIM_ENCODERMODE_TI1;
+        sConfig.IC1Polarity          = TIM_ICPOLARITY_RISING;
+        sConfig.IC1Selection         = TIM_ICSELECTION_DIRECTTI;
+        sConfig.IC1Prescaler         = TIM_ICPSC_DIV1;
+        sConfig.IC1Filter            = 0;
+        sConfig.IC2Polarity          = TIM_ICPOLARITY_RISING;
+        sConfig.IC2Selection         = TIM_ICSELECTION_DIRECTTI;
+        sConfig.IC2Prescaler         = TIM_ICPSC_DIV1;
+        sConfig.IC2Filter            = 0;
+        if (HAL_TIM_Encoder_Init(&htim3, &sConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+        sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
+        if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        /* USER CODE BEGIN TIM3_Init 2 */
+
+        /* USER CODE END TIM3_Init 2 */
+}
+
+/**
+ * @brief TIM4 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_TIM4_Init(void)
+{
+
+        /* USER CODE BEGIN TIM4_Init 0 */
+
+        /* USER CODE END TIM4_Init 0 */
+
+        TIM_Encoder_InitTypeDef sConfig       = {0};
+        TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+        /* USER CODE BEGIN TIM4_Init 1 */
+
+        /* USER CODE END TIM4_Init 1 */
+        htim4.Instance               = TIM4;
+        htim4.Init.Prescaler         = 0;
+        htim4.Init.CounterMode       = TIM_COUNTERMODE_UP;
+        htim4.Init.Period            = 27999;
+        htim4.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
+        htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+        sConfig.EncoderMode          = TIM_ENCODERMODE_TI1;
+        sConfig.IC1Polarity          = TIM_ICPOLARITY_RISING;
+        sConfig.IC1Selection         = TIM_ICSELECTION_DIRECTTI;
+        sConfig.IC1Prescaler         = TIM_ICPSC_DIV1;
+        sConfig.IC1Filter            = 0;
+        sConfig.IC2Polarity          = TIM_ICPOLARITY_RISING;
+        sConfig.IC2Selection         = TIM_ICSELECTION_DIRECTTI;
+        sConfig.IC2Prescaler         = TIM_ICPSC_DIV1;
+        sConfig.IC2Filter            = 0;
+        if (HAL_TIM_Encoder_Init(&htim4, &sConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+        sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
+        if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        /* USER CODE BEGIN TIM4_Init 2 */
+
+        /* USER CODE END TIM4_Init 2 */
 }
 
 /**
@@ -410,8 +512,7 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-        /*Configure GPIO pins : SCANNING_Pin INITIAL_HANDSHAKE_FAILED_Pin
-         * SPI2_CS_Pin */
+        /*Configure GPIO pins : SCANNING_Pin INITIAL_HANDSHAKE_FAILED_Pin SPI2_CS_Pin */
         GPIO_InitStruct.Pin   = SCANNING_Pin | INITIAL_HANDSHAKE_FAILED_Pin | SPI2_CS_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
