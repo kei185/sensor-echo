@@ -61,6 +61,8 @@ extern "C"
         void DMA1_Stream2_IRQHandler(void);
         void DMA1_Stream6_IRQHandler(void);
         void TIM2_IRQHandler(void);
+        void TIM3_IRQHandler(void);
+        void TIM4_IRQHandler(void);
         void SPI2_IRQHandler(void);
         void USART2_IRQHandler(void);
         void UART4_IRQHandler(void);
