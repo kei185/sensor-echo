@@ -18,8 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "protocol.h"
-#include "stm32f4xx_hal_gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -49,6 +47,7 @@ SPI_HandleTypeDef hspi2;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim5;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
@@ -70,6 +69,7 @@ static void MX_RTC_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
+static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -116,6 +116,7 @@ int main(void)
         MX_SPI2_Init();
         MX_TIM3_Init();
         MX_TIM4_Init();
+        MX_TIM5_Init();
         /* USER CODE BEGIN 2 */
 
         /* USER CODE END 2 */
@@ -265,9 +266,9 @@ static void MX_TIM2_Init(void)
 
         /* USER CODE END TIM2_Init 1 */
         htim2.Instance               = TIM2;
-        htim2.Init.Prescaler         = 41999;
+        htim2.Init.Prescaler         = 8399;
         htim2.Init.CounterMode       = TIM_COUNTERMODE_UP;
-        htim2.Init.Period            = 9999;
+        htim2.Init.Period            = 999;
         htim2.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
         htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
         if (HAL_TIM_Base_Init(&htim2) != HAL_OK) {
@@ -381,6 +382,47 @@ static void MX_TIM4_Init(void)
 }
 
 /**
+ * @brief TIM5 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_TIM5_Init(void)
+{
+
+        /* USER CODE BEGIN TIM5_Init 0 */
+
+        /* USER CODE END TIM5_Init 0 */
+
+        TIM_ClockConfigTypeDef  sClockSourceConfig = {0};
+        TIM_MasterConfigTypeDef sMasterConfig      = {0};
+
+        /* USER CODE BEGIN TIM5_Init 1 */
+
+        /* USER CODE END TIM5_Init 1 */
+        htim5.Instance               = TIM5;
+        htim5.Init.Prescaler         = 0;
+        htim5.Init.CounterMode       = TIM_COUNTERMODE_UP;
+        htim5.Init.Period            = 4294967295;
+        htim5.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
+        htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+        if (HAL_TIM_Base_Init(&htim5) != HAL_OK) {
+                Error_Handler();
+        }
+        sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+        if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+        sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
+        if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK) {
+                Error_Handler();
+        }
+        /* USER CODE BEGIN TIM5_Init 2 */
+
+        /* USER CODE END TIM5_Init 2 */
+}
+
+/**
  * @brief UART4 Initialization Function
  * @param None
  * @retval None
@@ -485,14 +527,18 @@ static void MX_GPIO_Init(void)
         /*Configure GPIO pin Output Level */
         HAL_GPIO_WritePin(
                 GPIOB,
-                SCANNING_Pin | INITIAL_HANDSHAKE_FAILED_Pin,
+                LIDAR_SCANNING_Pin | IMU_RUNNING_Pin | MOTOR_RUNNING_Pin |
+                        PROTOCOL_FAILED_Pin,
                 GPIO_PIN_RESET);
 
         /*Configure GPIO pin Output Level */
         HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
 
         /*Configure GPIO pin Output Level */
-        HAL_GPIO_WritePin(GPIOC, AIN1_Pin | AIN2_Pin | M_MODE_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(
+                GPIOC,
+                M_MODE2_Pin | BIN1_Pin | BIN2_Pin | AIN1_Pin | AIN2_Pin | M_MODE1_Pin,
+                GPIO_PIN_RESET);
 
         /*Configure GPIO pin : B1_Pin */
         GPIO_InitStruct.Pin  = B1_Pin;
@@ -513,15 +559,19 @@ static void MX_GPIO_Init(void)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-        /*Configure GPIO pins : SCANNING_Pin INITIAL_HANDSHAKE_FAILED_Pin SPI2_CS_Pin */
-        GPIO_InitStruct.Pin   = SCANNING_Pin | INITIAL_HANDSHAKE_FAILED_Pin | SPI2_CS_Pin;
+        /*Configure GPIO pins : LIDAR_SCANNING_Pin SPI2_CS_Pin IMU_RUNNING_Pin
+           MOTOR_RUNNING_Pin PROTOCOL_FAILED_Pin */
+        GPIO_InitStruct.Pin   = LIDAR_SCANNING_Pin | SPI2_CS_Pin | IMU_RUNNING_Pin |
+                                MOTOR_RUNNING_Pin | PROTOCOL_FAILED_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-        /*Configure GPIO pins : AIN1_Pin AIN2_Pin M_MODE_Pin */
-        GPIO_InitStruct.Pin   = AIN1_Pin | AIN2_Pin | M_MODE_Pin;
+        /*Configure GPIO pins : M_MODE2_Pin BIN1_Pin BIN2_Pin AIN1_Pin
+                                 AIN2_Pin M_MODE1_Pin */
+        GPIO_InitStruct.Pin =
+                M_MODE2_Pin | BIN1_Pin | BIN2_Pin | AIN1_Pin | AIN2_Pin | M_MODE1_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
