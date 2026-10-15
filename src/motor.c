@@ -4,7 +4,11 @@
 
 enum MOTOR_MODE GLOBAL_MOTOR_MODE = MOTOR_MODE_PHASE_ENABLE;
 
-void init_motor(void) {}
+const uint32_t MOTOR_COUNTER_SCALER = 100u;
+uint32_t       motor_right_counter  = 0u;
+uint32_t       motor_left_counter   = 0u;
+
+void init_motor(void) { motor_right_counter = motor_left_counter = 0u; }
 
 void set_motor_mode(enum MOTOR_MODE mode)
 {
