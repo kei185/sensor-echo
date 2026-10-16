@@ -45,18 +45,20 @@ static ParserMeta* set_type_code(ParserMeta* pm, uint8_t tc)
         return pm;
 }
 
-static void find_start_sign(void)
+static bool find_start_sign(void)
 {
         uint8_t previous = read_byte();
 
-        while (true) {
+        while (!has_read_timed_out()) {
                 uint8_t current = read_byte();
 
                 if (previous == SYS_PACKET_HEADER_MSB && current == SYS_PACKET_HEADER_LSB)
-                        return;
+                        return true;
 
                 previous = current;
         }
+
+        return false;
 }
 
 /**
@@ -80,12 +82,14 @@ static ParserMeta* read_res_len(ParserMeta* pm)
  */
 ParserMeta* read_meta(ParserMeta* rfm)
 {
-        find_start_sign();
+        start_read_timeout();
+        if (!find_start_sign())
+                return NULL;
 
         read_res_len(rfm);
 
         uint8_t tc = (uint8_t)dec_little_endian(SYS_PACKET_TYPE_CODE_SIZE);
         set_type_code(rfm, tc);
 
-        return rfm;
+        return has_read_timed_out() ? NULL : rfm;
 }

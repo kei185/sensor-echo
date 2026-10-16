@@ -10,6 +10,8 @@ bool read_device_info_frame(ParserDeviceInfo* info)
         if (info == NULL)
                 return false;
 
+        start_read_timeout();
+
         // Manual section 3.3: firmware low byte is major, high byte is minor.
         info->model            = read_byte();
         info->firmware_major   = read_byte();
@@ -19,5 +21,5 @@ bool read_device_info_frame(ParserDeviceInfo* info)
         for (size_t i = 0; i < SYS_PACKET_DEVICE_SERIAL_SIZE; ++i)
                 info->serial_number[i] = read_byte();
 
-        return true;
+        return !has_read_timed_out();
 };

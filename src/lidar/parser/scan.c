@@ -91,6 +91,8 @@ static uint32_t read_points(const ParserScanMeta* meta, ParserScannedPoint* p)
  */
 uint32_t read_scan_frame(ParserScannedPoint* points)
 {
+        start_read_timeout();
+
         // read header
         if (!is_valid_scan_header())
                 return 0;
@@ -114,5 +116,5 @@ uint32_t read_scan_frame(ParserScannedPoint* points)
         // read points and pack them into buf
         uint32_t read_num = read_points(&scanMeta, points);
 
-        return read_num;
+        return has_read_timed_out() ? 0u : read_num;
 }

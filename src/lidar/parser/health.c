@@ -22,8 +22,9 @@ bool read_health_frame(ParserHealth* health)
         if (health == NULL)
                 return false;
 
+        start_read_timeout();
         health->health = read_byte();
 
         health_parse(health);
-        return true;
+        return !has_read_timed_out();
 }
