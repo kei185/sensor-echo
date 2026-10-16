@@ -8,7 +8,7 @@
 
 #define WHEEL_ROTATION_Q6_SCALE    64u
 #define ENCODER_FRAME_PAYLOAD_SIZE 4u
-#define MOTOR_COMMAND_PAYLOAD_SIZE ENCODER_FRAME_PAYLOAD_SIZE
+#define MOTOR_COMMAND_PAYLOAD_SIZE 2u
 
 extern const uint8_t START_OF_FRAME[SOF_SIZE];
 
@@ -28,7 +28,6 @@ typedef enum
         FRAME_TYPE_TIME_SYNC_REPORT    = 0x0C,
         FRAME_TYPE_HANDSHAKE_ACK       = 0x0D,
         FRAME_TYPE_MOTOR_ACK           = 0x0E,
-        FRAME_TYPE_SOFT_RESET_ACK      = 0x0F,
 } FrameType;
 
 typedef enum
@@ -39,7 +38,6 @@ typedef enum
         HOST_COMMAND_TIME_SYNC_START,
         HOST_COMMAND_TIME,
         HOST_COMMAND_HANDSHAKE,
-        HOST_COMMAND_SOFT_RESET,
         HOST_COMMAND_MOTOR,
         HOST_COMMAND_COUNT,
 } HostCommand;
@@ -60,6 +58,5 @@ extern const uint8_t HOST_COMMANDS[HOST_COMMAND_COUNT][HOST_COMMAND_SIZE];
 #define FRAME_MESSAGE_TIME_ACK            "TIME ACK"
 #define FRAME_MESSAGE_HANDSHAKE_ACK       "HANDSHAKE ACK"
 #define FRAME_MESSAGE_MOTOR_ACK           "MOTOR ACK"
-#define FRAME_MESSAGE_SOFT_RESET_ACK      "SOFT RESET ACK"
 
 #endif

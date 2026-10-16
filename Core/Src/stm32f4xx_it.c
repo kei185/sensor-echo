@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "arbiter.h"
+#include "protocol.h"
 #include "motor.h"
 #include "imu/handler.h"
 #include "stm32f4xx_hal_gpio.h"
@@ -362,9 +363,23 @@ void UART4_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+{
+        if (htim->Instance == htim5.Instance)
+                motor_encoder_timeout = true;
+
+        if (htim->Instance == htim3.Instance)
+                motor_right_counter++;
+
+        if (htim->Instance == htim4.Instance)
+                motor_left_counter++;
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 {
+        if (huart == &huart2)
+                host_command_handler();
+
         if (huart == &huart4)
                 dma_receive_complete_handler();
 }

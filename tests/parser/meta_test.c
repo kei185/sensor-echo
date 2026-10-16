@@ -141,6 +141,27 @@ static void read_meta_preserves_high_bit_wire_bytes(void)
         assert(parser_test_bytes_read() == sizeof(input));
 }
 
+static void read_meta_rejects_incomplete_headers_and_missing_start_sign(void)
+{
+        const uint8_t input[] = {0xa5u, 0x5au, 0x05u, 0x00u, 0x00u, 0x40u, 0x81u};
+        ParserMeta    actual  = {0};
+
+        // ヘッダのどの位置で受信が途切れても、成功扱いせず戻ってくる。
+        for (size_t length = 0u; length < sizeof(input); ++length) {
+                parser_test_set_input(input, length);
+                assert(read_meta(&actual) == NULL);
+        }
+
+        // 開始記号のない入力でも、タイムアウト後に探索を終える。
+        const uint8_t noise[] = {0x00u, 0xffu, 0xa5u, 0x00u};
+        parser_test_set_input(noise, sizeof(noise));
+        assert(read_meta(&actual) == NULL);
+
+        // 次の正常なフレームは、前回のタイムアウトを引きずらずに読める。
+        parser_test_set_input(input, sizeof(input));
+        assert(read_meta(&actual) == &actual);
+}
+
 int main(void)
 {
         read_meta_skips_noise_and_reads_device_info_header();
@@ -148,5 +169,6 @@ int main(void)
         read_meta_preserves_all_30_response_length_bits();
         read_meta_marks_unknown_mode_and_type_as_undefined();
         read_meta_preserves_high_bit_wire_bytes();
+        read_meta_rejects_incomplete_headers_and_missing_start_sign();
         return 0;
 }

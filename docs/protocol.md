@@ -6,10 +6,53 @@ software-started TX DMA.
 TX slot ownership, queueing, and UART DMA dispatch are described in
 [tx.md](tx.md).
 
+## Current host command reception
+
+| Item | Current source behavior |
+|---|---|
+| Startup | Blocking handshake, time sync, and start-scan exchange |
+| RX during scanning | One 4-byte motor frame per interrupt receive |
+| Field order | `AA A7` → left signed PWM % → right signed PWM % |
+| Completion callback | Checks the command and updates motor PWM inside the interrupt |
+| Next receive | Armed inside the same callback after processing the frame |
+| Invalid command or PWM value | Ignored; previous motor output stays active |
+| Motor ACK | Defined but not sent |
+| Recovery during normal communication | Not implemented |
+
+```text
+       Receive one 4-byte frame
+                  |
+                  v
+       Interrupt checks the frame
+                  |
+          +-------+-------+
+          |               |
+        Valid          Invalid
+          |               |
+          v               v
+       Apply PWM        Ignore
+          |               |
+          +-------+-------+
+                  |
+                  v
+       Arm the next 4-byte receive
+```
+
+The callback updates motor output and arms the next receive before returning.
+It does not wait for the main loop. Motor commands send no ACK. The current
+path has no RX queue, incomplete-command timeout, or byte-by-byte
+resynchronization.
+
+LiDAR parsing stops after 2 ms without a readable byte, or 40 ms for the
+whole frame. The partial frame is discarded so the main loop can continue
+other sensor and TX work. Motor commands can run in the interrupt while
+LiDAR parsing waits. At 230400 bps, the largest scan packet takes about
+34 ms on the wire.
+
 ## Connection and recovery
 
-The host starts a session with a handshake. If a protocol error occurs during
-startup or normal communication, both sides return to this stage.
+The host starts a session with a handshake. The diagrams below show planned
+recovery. Returning an active session to handshake is not implemented yet.
 
 ```mermaid
 flowchart TD
@@ -19,16 +62,12 @@ flowchart TD
     setup -- Protocol error --> recover["Stop operation<br/>Discard old session data"]
     active -- Protocol error --> recover
     recover --> handshake
-    reset["Soft reset command<br/>During handshake, startup, or normal communication"] --> stop["Stop operation"]
-    stop --> reset_ack["Send SOFT RESET ACK<br/>Wait until UART transmission completes"]
-    reset_ack --> restart["Restart controller"]
-    restart --> handshake
 ```
 
 ```text
                        NORMAL COMMUNICATION
             +------+                            +------------+
-            | Host | -- left/right motor Q6 --> | Controller |
+            | Host | -- left/right PWM % -----> | Controller |
             |      | <------ MOTOR ACK -------- |            |
             |      | <-- sensor/encoder data -- |            |
             +------+                            +------------+
@@ -65,11 +104,8 @@ flowchart TD
 - Motor commands resume only after startup, time sync, and a new start command.
 - Each accepted motor command receives `MOTOR ACK`. If the expected ACK is
   missing, the host returns to the handshake stage.
-- Soft reset also returns to the handshake stage. The controller sends its
-  reset ACK completely before restarting.
 
-These are protocol requirements; the new firmware handlers and recovery path
-are not implemented yet. The message bytes and startup order are defined in
+These are recovery requirements. The message bytes and startup order are defined in
 [frame.md](frame.md#startup-sequence).
 
 A LiDAR RX overrun uses the local recovery below. It does not restart the host
@@ -77,35 +113,22 @@ handshake when the stream parser can find a new valid packet.
 
 ## Motor command and ACK
 
+This is the planned ACK exchange. The current source sends no motor ACK and
+ignores invalid values without starting recovery.
+
 ```mermaid
 flowchart TD
-    command["Host sends AA A7 and left/right Q6 rotations"] --> validate{"Valid motor command?"}
+    command["Host sends AA A7 and left/right signed PWM percentages"] --> validate{"Both values in -100 to 100?"}
     validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
-    validate -- Yes --> accept["Controller accepts requested rotations"]
+    validate -- Yes --> accept["Apply PWM duty from magnitude<br/>Negative: reverse; zero: brake"]
     accept --> ack["Controller sends MOTOR ACK"]
     ack --> host{"Host received ACK?"}
     host -- Yes --> active["Continue normal communication"]
     host -- Receive timeout --> recover
 ```
 
-The ACK confirms command acceptance. Encoder reports show the measured wheel
-rotations separately.
-
-## Soft reset
-
-```text
-Host                        Controller
- | -- Soft reset AA A6 ------> |
- |                             | Stop scanning and wheel motion
- | <-- SOFT RESET ACK -------- |
- |                             | Wait for complete ACK transmission
- |                             | Restart and clear the old session
- | -- Handshake, every 3 s ---> |
- | <-- HANDSHAKE ACK ---------- |
- |                             |
- +---- Startup and time sync --+
- +---- New start command ------+
-```
+The planned ACK confirms command acceptance. Encoder reports show the measured
+wheel rotations separately.
 
 ## Scan path
 

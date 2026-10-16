@@ -1,14 +1,15 @@
 # Startup Sequence
 
-Startup uses blocking UART transfers. Scan data uses DMA after the host sends the
-start scan command.
+Startup uses blocking UART transfers. During scanning, LiDAR reception and host
+frame transmission use DMA. Host motor commands use UART receive interrupts.
 
 The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
 Initialization starts after this exchange. For protocol errors and recovery,
 see [protocol.md](protocol.md#connection-and-recovery).
 
-Handshake, motor commands and ACKs, soft reset, and recovery are protocol
-requirements. Their firmware handlers are not implemented yet.
+The diagram shows the current startup path. `INITIALIZING`, device information,
+and health transfers are disabled in this path. `MOTOR ACK` and recovery during
+normal communication are planned.
 
 ```mermaid
 sequenceDiagram
@@ -23,13 +24,6 @@ sequenceDiagram
             Controller->>Host: HANDSHAKE ACK system frame
         end
     end
-    Controller->>Host: INITIALIZING system frame
-    Controller->>LiDAR: Device information request A5 90
-    LiDAR-->>Controller: Device information response
-    Controller->>Host: Device information system frame
-    Controller->>LiDAR: Health status request A5 92
-    LiDAR-->>Controller: Health status response
-    Controller->>Host: Health status system frame
     Controller->>Host: READY system frame
     Host->>Controller: Time sync start AA A4
     Controller->>Host: TIME SYNC START ACK
@@ -40,13 +34,16 @@ sequenceDiagram
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Start circular LiDAR RX DMA
+    Controller->>Controller: Arm 4-byte host command RX using interrupts
     Controller->>LiDAR: Start scan command A5 60
     LiDAR-->>Controller: Continuous scan stream
+    Controller->>Controller: Check LiDAR meta header and configure IMU
+    Controller->>Controller: Enter normal communication loop
 ```
 
-The controller requests device information and health status while the LiDAR is
-idle. The LiDAR manual allows only the stop command during scanning. RX DMA
-starts before `A5 60`, so the controller can receive the first scan bytes.
+Device information and health checks can be restored before scanning. The LiDAR
+manual allows only the stop command during scanning. RX DMA starts before
+`A5 60`, so the controller can receive the first scan bytes.
 The controller sends `START SCAN ACK` after it accepts the host command and
 before it starts RX DMA. The ACK confirms the host command only. It does not
 confirm DMA startup, the `A5 60` UART transfer, or a LiDAR response.
@@ -58,72 +55,75 @@ before starting a new scan.
 
 ## Host-to-Controller Commands
 
-These messages have no terminator. Handshake, Start scan, Time sync start, and
-Soft reset are two-byte commands. Time appends two timestamps. Motor control
-appends the same 4-byte payload as an encoder report.
+These messages have no terminator. Handshake, Start scan, and Time sync start
+are two-byte commands. Time appends two timestamps. Motor control
+appends two one-byte signed PWM percentages, left first and then right.
 
 The controller accepts `Time` only after it has acknowledged `Time sync start`.
-It accepts motor commands only during normal communication.
+During normal communication, it receives fixed 4-byte motor frames only.
 
-| Message | Wire data | Size |
-|---|---|---:|
-| Handshake | `0xAA 0xA0` | 2 bytes |
-| Start scan | `0xAA 0xA2` | 2 bytes |
-| Time sync start | `0xAA 0xA4` | 2 bytes |
-| Time | `0xAA 0xA5`, ACK receive time, and Time send time | 18 bytes |
-| Soft reset | `0xAA 0xA6` | 2 bytes |
-| Motor control | `0xAA 0xA7`, left and right Q6 rotations | 6 bytes |
+| Message | Wire data (first → last) | Size | Accepted stage |
+|---|---|---:|---|
+| Handshake | `0xAA 0xA0` | 2 bytes | Startup: wait for handshake |
+| Start scan | `0xAA 0xA2` | 2 bytes | Startup: wait for start command |
+| Time sync start | `0xAA 0xA4` | 2 bytes | Startup: time sync |
+| Time | `0xAA 0xA5` → **`ack_time`** → **`send_time`** | 18 bytes | Startup: after time-sync start ACK |
+| Motor control | `0xAA 0xA7` → **left PWM %** → **right PWM %** | 4 bytes | Normal communication |
 
 `Handshake` is a connection request, not a heartbeat. The host stops its
-3-second retry loop after `HANDSHAKE ACK`. If a previous session is still active,
-the controller stops it and clears its pending data before acknowledging the
-new handshake.
+3-second retry loop after `HANDSHAKE ACK`. A new handshake during normal
+communication is not handled yet; see the planned recovery in
+[protocol.md](protocol.md#connection-and-recovery).
 
 ### Motor control
 
-The host sends a two-byte command followed by the same payload layout used for
-encoder reports:
+The host sends a two-byte command followed by one signed PWM percentage per wheel:
 
 - Direction: host to controller
 - Command: `0xAA 0xA7`
-- Total size: 6 bytes
-- Payload length: `4`
-- Payload: left wheel first, then right wheel; 16-bit Q6 rotations, little-endian
-- Unit: `rotations`, matching [Encoder Frame payload](#encoder-frame-payload)
+- Total size: 4 bytes
+- Payload length: `2`
+- Payload: left wheel first, then right wheel; one signed 8-bit two's-complement integer each
+- Unit: signed PWM duty percentage (`%`)
+- Valid range: `-100` to `100`, inclusive
 - A two-byte command and its payload only; no TX frame header
 
-Motor commands carry requested wheel rotations. Encoder reports carry measured
-wheel rotations in controller-to-host frames, type `0x03`.
+The magnitude sets PWM duty directly. The sign sets direction. Each field is
+one byte, so it has no byte order.
 
-After accepting a valid motor command, the controller sends `MOTOR ACK`, type
-`0x0E`. The ACK confirms that the requested values were accepted; it does not
-mean the wheels have completed those rotations. An invalid motor command receives
-no ACK and triggers protocol recovery.
+| Wire order | Byte offset | Field | Size | Format | Unit | Valid range |
+|---:|---:|---|---:|---|---|---|
+| 1st | `0` | Command | 2 bytes | `0xAA 0xA7` | - | Fixed |
+| 2nd | `2` | **Left** motor command | 1 byte | Signed 8-bit two's complement | PWM duty %; negative = reverse | `-100` to `100` |
+| 3rd | `3` | **Right** motor command | 1 byte | Signed 8-bit two's complement | PWM duty %; negative = reverse | `-100` to `100` |
+
+| Signed value | Direction | PWM duty | Driver behavior |
+|---|---|---:|---|
+| `1` to `100` | Forward | Value in % | Forward/brake |
+| `0` | Stopped | 0% | Brake low |
+| `-100` to `-1` | Reverse | Absolute value in % | Reverse/brake |
+
+The [Pololu DRV8835](https://www.pololu.com/product/2135/) uses PHASE/ENABLE
+mode: MODE is High, PHASE is Low for forward and High for reverse, and ENABLE
+receives PWM. ENABLE Low brakes the motor. The percentage controls PWM output;
+it does not guarantee a measured wheel speed.
+
+The current source applies valid values without sending an ACK. An unknown
+command or an out-of-range value is ignored, leaving the previous PWM output
+unchanged. `MOTOR ACK`, type `0x0E`, and recovery after invalid commands are
+planned. The planned ACK confirms acceptance of both PWM values.
 
 ```text
                     HOST -> CONTROLLER: MOTOR CONTROL
-byte offset   0        2        4        6
-              +--------+--------+--------+
-              | AA A7  | left Q6|right Q6|
-              +--------+--------+--------+
-              <- cmd -><-- 4-byte data -->
+byte offset   0      1      2      3      4
+              +------+------+------+------+
+              |  AA  |  A7  | left |right |
+              +------+------+------+------+
+              <-- command --><-- PWM % --->
 ```
 
-For left `12.5` rotations and right `7.25` rotations, the payload is
-`20 03 D0 01`, exactly as in the encoder example. The complete command is
-`AA A7 20 03 D0 01`. The payload carries rotation counts; it does not carry RPM
-or rotations per second.
-
-### Soft reset
-
-The host can send `0xAA 0xA6` during handshake, startup, or normal communication.
-The controller stops scanning and wheel motion, then sends `SOFT RESET ACK`,
-type `0x0F`. It waits until the complete ACK frame has left the UART before
-restarting its firmware and clearing the previous session.
-
-After the ACK, the host returns to the 3-second handshake retry loop. Startup,
-UTC time sync, and a new start command are required before operation resumes.
-If the ACK is missing, the host also returns to the handshake loop.
+For left `+50%` and right `-100%`, the payload is `32 9C` in hexadecimal. The
+complete command is `AA A7 32 9C`. Both zero, `AA A7 00 00`, brakes both motors.
 
 ### Time command
 
@@ -136,11 +136,11 @@ command, and replies with `TIME ACK`.
 
 The Time frame uses this byte layout:
 
-| Byte offset | Size | Field | Format |
-|---:|---:|---|---|
-| `0` | 2 bytes | Command | `0xAA 0xA5` |
-| `2` | 8 bytes | `ack_time` | Unsigned 64-bit Unix milliseconds, little-endian |
-| `10` | 8 bytes | `send_time` | Unsigned 64-bit Unix milliseconds, little-endian |
+| Wire order | Byte offset | Size | Field | Format |
+|---:|---:|---:|---|---|
+| 1st | `0` | 2 bytes | Command | `0xAA 0xA5` |
+| 2nd | `2` | 8 bytes | **`ack_time`** (ACK receive time) | Unsigned 64-bit Unix milliseconds, little-endian |
+| 3rd | `10` | 8 bytes | **`send_time`** (Time send time) | Unsigned 64-bit Unix milliseconds, little-endian |
 
 The host performs this four-message exchange once. The controller uses the four
 timestamps to set its RTC, then sends one time-sync report.
@@ -199,7 +199,6 @@ prescaler resolution.
 |0xAA55|-|-| 0x0C  Time-sync report |-| One time-sync measurement |
 |0xAA55|-|-| 0x0D  Handshake acknowledged |-| `HANDSHAKE ACK` |
 |0xAA55|-|-| 0x0E  Motor command acknowledged |-| `MOTOR ACK` |
-|0xAA55|-|-| 0x0F  Soft reset acknowledged |-| `SOFT RESET ACK` |
 
 The header is 14 bytes. The start-of-frame marker is the fixed byte sequence
 `0xAA 0x55`. Payload length and timestamp are little-endian. The payload begins
@@ -238,7 +237,9 @@ after the 14-byte TX header. The header payload length marks the message end.
 | `0x0C` | Time synchronization completed | Time-sync measurement report |
 | `0x0D` | Handshake received | `HANDSHAKE ACK` |
 | `0x0E` | Motor values accepted | `MOTOR ACK` |
-| `0x0F` | Soft reset accepted, before firmware restart | `SOFT RESET ACK` |
+
+`INITIALIZING`, device information, and health messages are defined but disabled
+in the current startup path. `MOTOR ACK` is defined but not sent yet.
 
 A time-sync report is one ASCII payload ending with `\r\n`:
 
@@ -332,17 +333,21 @@ The host can convert gyroscope samples to `dps` and accelerometer samples to
 
 ### Encoder Frame payload
 
-Direction: controller to host, type `0x03`. Motor commands reuse only the
-four-byte payload layout after their `0xAA 0xA7` command bytes.
+Direction: controller to host, type `0x03`.
 
-Size: 4 bytes per sample. The left wheel value comes first, followed by the
-right wheel value. Each value is a 16-bit Q6 wheel rotation count and uses the
+Size: 4 bytes per sample. Each sample reports the rotation change since the
+previous counter reset, not a cumulative position. The target sampling period
+is 100 ms (10 Hz) using TIM5. Encoder wraparound handling is not complete yet.
+Reverse encoder motion is outside the current scope.
+
+The left wheel value comes first, followed by the right wheel value. Each value
+is a signed 16-bit Q6 wheel rotation count in two's complement and uses the
 same little-endian byte order as the other multi-byte host-frame fields.
 
-| Payload offset | Field | Size | Format | Unit | Byte order |
-|---:|---|---:|---|---|---|
-| `0` | Left wheel rotation count | 2 bytes | 16-bit Q6 | rotations | little-endian |
-| `2` | Right wheel rotation count | 2 bytes | 16-bit Q6 | rotations | little-endian |
+| Payload order | Payload offset | Field | Size | Format | Unit | Byte order |
+|---:|---:|---|---:|---|---|---|
+| 1st | `0` | **Left** wheel rotation count | 2 bytes | Signed 16-bit Q6 | rotations | little-endian |
+| 2nd | `2` | **Right** wheel rotation count | 2 bytes | Signed 16-bit Q6 | rotations | little-endian |
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%

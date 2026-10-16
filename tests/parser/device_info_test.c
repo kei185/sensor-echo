@@ -43,9 +43,22 @@ static void read_device_info_frame_rejects_null_output_without_reading(void)
         assert(parser_test_bytes_read() == 0u);
 }
 
+static void read_device_info_frame_rejects_every_truncated_prefix(void)
+{
+        const uint8_t    input[20] = {151u, 2u, 7u, 3u};
+        ParserDeviceInfo actual   = {0};
+
+        // serialの途中まで読めていても、未完了の情報は採用しない。
+        for (size_t length = 0u; length < sizeof(input); ++length) {
+                parser_test_set_input(input, length);
+                assert(!read_device_info_frame(&actual));
+        }
+}
+
 int main(void)
 {
         read_device_info_frame_preserves_wire_byte_order();
         read_device_info_frame_rejects_null_output_without_reading();
+        read_device_info_frame_rejects_every_truncated_prefix();
         return 0;
 }

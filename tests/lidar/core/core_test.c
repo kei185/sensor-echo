@@ -8,6 +8,16 @@
 
 DMA_Stream_TypeDef mock_dma1_stream2;
 
+static uint32_t mock_tick;
+static uint32_t mock_tick_step;
+
+uint32_t HAL_GetTick(void)
+{
+        uint32_t tick = mock_tick;
+        mock_tick += mock_tick_step;
+        return tick;
+}
+
 static void set_dma_write_index(int32_t index)
 {
         assert(index >= 0);
@@ -46,6 +56,75 @@ static void dma_terminal_count_is_normalized_to_the_ring_start(void)
         mock_dma1_stream2.NDTR = 0u;
         reset_read_idx();
         assert(RX_BUF->read_idx == 0);
+}
+
+static void empty_receive_times_out_without_advancing_the_reader(void)
+{
+        reset_reader_at(0);
+        mock_tick      = 100u;
+        mock_tick_step = 1u;
+        start_read_timeout();
+
+        // DMAが進まなくても短時間で戻り、未受信の場所は消費しない。
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == 0);
+        assert(mock_tick < 110u);
+        mock_tick_step = 0u;
+
+        // 後からデータが来ても、失敗したフレームの続きとしては読まない。
+        RX_BUF->_buf[0] = 0u;
+        set_dma_write_index(3);
+        assert(read_byte() == 0u);
+        assert(RX_BUF->read_idx == 0);
+
+        // 次の解析では失敗状態を解除し、正常な0バイトも読み取れる。
+        start_read_timeout();
+        assert(read_byte() == 0u);
+        assert(!has_read_timed_out());
+        assert(RX_BUF->read_idx == 1);
+}
+
+static void frame_deadline_is_not_extended_by_successful_reads(void)
+{
+        reset_reader_at(0);
+        set_dma_write_index(100);
+        mock_tick      = 0u;
+        mock_tick_step = 0u;
+        start_read_timeout();
+
+        // データが途切れず読めても、解析開始から40msで打ち切る。
+        for (uint32_t elapsed = 0u; elapsed < 40u; ++elapsed) {
+                mock_tick = elapsed;
+                (void)read_byte();
+                assert(!has_read_timed_out());
+        }
+        mock_tick = 40u;
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == 40);
+}
+
+static void timeouts_work_across_tick_wraparound(void)
+{
+        reset_reader_at(0);
+        mock_tick      = UINT32_MAX - 1u;
+        mock_tick_step = 1u;
+        start_read_timeout();
+
+        // 1バイトの待ち時間がtickの一周をまたいでも戻ってくる。
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == 0);
+        assert(mock_tick < 10u);
+
+        mock_tick_step = 0u;
+        mock_tick      = UINT32_MAX - 10u;
+        start_read_timeout();
+        mock_tick += 39u;
+        assert(!has_read_timed_out());
+        mock_tick += 1u;
+        assert(has_read_timed_out());
 }
 
 static void queue_wraps_after_five_slots_and_preserves_fifo_order(void)
@@ -92,6 +171,9 @@ int main(void)
 
         overrun_detection_uses_signed_ring_index_differences();
         dma_terminal_count_is_normalized_to_the_ring_start();
+        empty_receive_times_out_without_advancing_the_reader();
+        frame_deadline_is_not_extended_by_successful_reads();
+        timeouts_work_across_tick_wraparound();
         queue_wraps_after_five_slots_and_preserves_fifo_order();
         return 0;
 }

@@ -61,10 +61,20 @@ static void read_health_frame_rejects_null_output_without_reading(void)
         assert(parser_test_bytes_read() == 0u);
 }
 
+static void read_health_frame_rejects_missing_status(void)
+{
+        ParserHealth actual = {0};
+
+        // タイムアウト時の0を、正常なステータスとして返さない。
+        parser_test_set_input(NULL, 0u);
+        assert(!read_health_frame(&actual));
+}
+
 int main(void)
 {
         read_health_frame_clears_every_flag_for_zero_status();
         read_health_frame_decodes_each_status_bit();
         read_health_frame_rejects_null_output_without_reading();
+        read_health_frame_rejects_missing_status();
         return 0;
 }

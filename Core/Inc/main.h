@@ -45,6 +45,7 @@ extern "C"
         extern TIM_HandleTypeDef  htim2;
         extern TIM_HandleTypeDef  htim3;
         extern TIM_HandleTypeDef  htim4;
+        extern TIM_HandleTypeDef  htim5;
 
         extern DMA_HandleTypeDef hdma_uart4_rx;
         extern DMA_HandleTypeDef hdma_usart2_tx;
@@ -60,6 +61,8 @@ extern "C"
         /* USER CODE BEGIN EM */
 
         /* USER CODE END EM */
+
+        void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim);
 
         /* Exported functions prototypes ---------------------------------------------*/
         void Error_Handler(void);
@@ -93,24 +96,22 @@ extern "C"
 #define MOTOR_RUNNING_GPIO_Port   GPIOB
 #define PROTOCOL_FAILED_Pin       GPIO_PIN_15
 #define PROTOCOL_FAILED_GPIO_Port GPIOB
-#define M_MODE2_Pin               GPIO_PIN_7
-#define M_MODE2_GPIO_Port         GPIOC
-#define BIN1_Pin                  GPIO_PIN_8
-#define BIN1_GPIO_Port            GPIOC
-#define BIN2_Pin                  GPIO_PIN_9
-#define BIN2_GPIO_Port            GPIOC
 #define TMS_Pin                   GPIO_PIN_13
 #define TMS_GPIO_Port             GPIOA
 #define TCK_Pin                   GPIO_PIN_14
 #define TCK_GPIO_Port             GPIOA
-#define AIN1_Pin                  GPIO_PIN_10
-#define AIN1_GPIO_Port            GPIOC
-#define AIN2_Pin                  GPIO_PIN_11
-#define AIN2_GPIO_Port            GPIOC
-#define M_MODE1_Pin               GPIO_PIN_12
-#define M_MODE1_GPIO_Port         GPIOC
+#define M_ENABLE_PWM1_Pin         GPIO_PIN_15
+#define M_ENABLE_PWM1_GPIO_Port   GPIOA
+#define M_PHASE1_Pin              GPIO_PIN_10
+#define M_PHASE1_GPIO_Port        GPIOC
+#define M_MODE_Pin                GPIO_PIN_12
+#define M_MODE_GPIO_Port          GPIOC
 #define SWO_Pin                   GPIO_PIN_3
 #define SWO_GPIO_Port             GPIOB
+#define M_PHASE2_Pin              GPIO_PIN_8
+#define M_PHASE2_GPIO_Port        GPIOB
+#define M_ENABLE_PWM2_Pin         GPIO_PIN_9
+#define M_ENABLE_PWM2_GPIO_Port   GPIOB
 
         /* USER CODE BEGIN Private defines */
 

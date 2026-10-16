@@ -114,7 +114,7 @@ whether unread LiDAR data was overwritten. The RX behavior is described in
 | Item | Largest size |
 |---|---:|
 | One LiDAR packet with one-byte LSN | `10 + 3 * 255 = 775` bytes |
-| One host LiDAR frame | `10 + 4 * 255 = 1030` bytes |
+| One host LiDAR frame | `14 + 4 * 255 = 1034` bytes |
 | One TX slot | 1344 bytes |
 | Number of TX slots | 5 |
 
@@ -125,7 +125,7 @@ TX storage: 6720 bytes
 +-----------------+-----------------+-----------------+-----------------+-----------------+
 0                1344              2688              4032              5376              6720
 
-Largest frame: [header 10 B][255 points x 4 B][unused 314 B]
+Largest frame: [header 14 B][255 points x 4 B][unused 310 B]
 ```
 
 One slot can be transmitting while four complete frames wait. The payload

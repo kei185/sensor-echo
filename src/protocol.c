@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "main.h"
 
@@ -8,7 +9,6 @@
 #include "protocol.h"
 #include "startup.h"
 #include "time_sync.h"
-#include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_def.h"
 #include "tx/frame.h"
 #include "tx/header.h"
@@ -17,12 +17,18 @@
 #include "lidar/parser/meta.h"
 #include "lidar/translate.h"
 #include "imu/handler.h"
+#include "motor.h"
 
-// bool enc_arrived = false;
+static uint8_t host_command_buf[HOST_MOTOR_COMMAND_SIZE];
+
 void loop()
 {
         while (!run_startup_sequence())
                 ;
+
+        if (HAL_UART_Receive_IT(&huart2, host_command_buf, HOST_MOTOR_COMMAND_SIZE) !=
+            HAL_OK)
+                Error_Handler();
 
         // // send start scan command
         HAL_StatusTypeDef scan_start_status =
@@ -38,10 +44,7 @@ void loop()
         read_meta(&meta);
         if (meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
             meta.type_code != SYS_TYPE_CODE_SCAN) {
-                HAL_GPIO_WritePin(
-                        INITIAL_HANDSHAKE_FAILED_GPIO_Port,
-                        INITIAL_HANDSHAKE_FAILED_Pin,
-                        1);
+                HAL_GPIO_WritePin(PROTOCOL_FAILED_GPIO_Port, PROTOCOL_FAILED_Pin, 1);
 
                 Error_Handler();
         }
@@ -51,7 +54,7 @@ void loop()
                 Error_Handler();
         }
 
-        SCANNING_GPIO_Port->ODR ^= SCANNING_Pin;
+        LIDAR_SCANNING_GPIO_Port->ODR ^= LIDAR_SCANNING_Pin;
 
         size_t len;
 
@@ -87,8 +90,25 @@ void loop()
                         continue;
                 }
 
-                // if (enc_arrived)
-                //  translate_enc();
+                if (motor_encoder_timeout) {
+                        motor_encoder_timeout = false;
+
+                        motor_timeout_handler(tbs->_buf + TX_FRAME_HEADER_SIZE);
+
+                        len = tx_frame_write_header(
+                                tbs->_buf,
+                                CORE_TX_BUF_SIZE,
+                                ENCODER_FRAME_PAYLOAD_SIZE,
+                                FRAME_TYPE_ENC,
+                                time_sync_get_unix_time_ms());
+
+                        if (len == 0)
+                                continue;
+
+                        push_full_slot(tbs, len);
+
+                        continue;
+                }
 
                 if (is_lapped()) {
                         reset_read_idx();
@@ -104,4 +124,29 @@ void loop()
                 push_full_slot(tbs, (uint32_t)len);
                 try_dispatch_tx();
         }
+}
+
+void host_command_handler(void)
+{
+        HostCommand type = HOST_COMMAND_COUNT;
+        for (HostCommand candidate = 0; candidate < HOST_COMMAND_COUNT; candidate++) {
+                if (memcmp(host_command_buf,
+                           HOST_COMMANDS[candidate],
+                           HOST_COMMAND_SIZE) == 0) {
+                        type = candidate;
+                        break;
+                }
+        }
+
+        switch (type) {
+                case HOST_COMMAND_MOTOR:
+                        motor_command_handler(host_command_buf + HOST_COMMAND_SIZE);
+                        break;
+                default:
+                        break;
+        }
+
+        if (HAL_UART_Receive_IT(&huart2, host_command_buf, HOST_MOTOR_COMMAND_SIZE) !=
+            HAL_OK)
+                Error_Handler();
 }

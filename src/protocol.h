@@ -10,4 +10,7 @@
 
 void loop(void);
 
+// UART2の4バイト受信完了コールバックから呼び、motor更新と次の受信設定を行う。
+void host_command_handler(void);
+
 #endif

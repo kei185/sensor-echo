@@ -21,6 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "motor.h"
+#include "protocol.h"
 
 /* USER CODE END Includes */
 
@@ -118,6 +120,7 @@ int main(void)
         MX_TIM4_Init();
         MX_TIM5_Init();
         /* USER CODE BEGIN 2 */
+        init_motor();
 
         /* USER CODE END 2 */
 
@@ -261,14 +264,15 @@ static void MX_TIM2_Init(void)
 
         TIM_ClockConfigTypeDef  sClockSourceConfig = {0};
         TIM_MasterConfigTypeDef sMasterConfig      = {0};
+        TIM_OC_InitTypeDef      sConfigOC          = {0};
 
         /* USER CODE BEGIN TIM2_Init 1 */
 
         /* USER CODE END TIM2_Init 1 */
         htim2.Instance               = TIM2;
-        htim2.Init.Prescaler         = 8399;
+        htim2.Init.Prescaler         = 0;
         htim2.Init.CounterMode       = TIM_COUNTERMODE_UP;
-        htim2.Init.Period            = 999;
+        htim2.Init.Period            = 4199;
         htim2.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
         htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
         if (HAL_TIM_Base_Init(&htim2) != HAL_OK) {
@@ -278,15 +282,28 @@ static void MX_TIM2_Init(void)
         if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK) {
                 Error_Handler();
         }
+        if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
+                Error_Handler();
+        }
         sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
         sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
         if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK) {
                 Error_Handler();
         }
+        sConfigOC.OCMode     = TIM_OCMODE_PWM1;
+        sConfigOC.Pulse      = 0;
+        sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+        sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+        if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK) {
+                Error_Handler();
+        }
+        if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
+                Error_Handler();
+        }
         /* USER CODE BEGIN TIM2_Init 2 */
-        HAL_TIM_Base_Start_IT(&htim2);
 
         /* USER CODE END TIM2_Init 2 */
+        HAL_TIM_MspPostInit(&htim2);
 }
 
 /**
@@ -400,9 +417,9 @@ static void MX_TIM5_Init(void)
 
         /* USER CODE END TIM5_Init 1 */
         htim5.Instance               = TIM5;
-        htim5.Init.Prescaler         = 0;
+        htim5.Init.Prescaler         = 8399;
         htim5.Init.CounterMode       = TIM_COUNTERMODE_UP;
-        htim5.Init.Period            = 4294967295;
+        htim5.Init.Period            = 999;
         htim5.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
         htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
         if (HAL_TIM_Base_Init(&htim5) != HAL_OK) {
@@ -528,17 +545,14 @@ static void MX_GPIO_Init(void)
         HAL_GPIO_WritePin(
                 GPIOB,
                 LIDAR_SCANNING_Pin | IMU_RUNNING_Pin | MOTOR_RUNNING_Pin |
-                        PROTOCOL_FAILED_Pin,
+                        PROTOCOL_FAILED_Pin | M_PHASE2_Pin,
                 GPIO_PIN_RESET);
 
         /*Configure GPIO pin Output Level */
         HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
 
         /*Configure GPIO pin Output Level */
-        HAL_GPIO_WritePin(
-                GPIOC,
-                M_MODE2_Pin | BIN1_Pin | BIN2_Pin | AIN1_Pin | AIN2_Pin | M_MODE1_Pin,
-                GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, M_PHASE1_Pin | M_MODE_Pin, GPIO_PIN_RESET);
 
         /*Configure GPIO pin : B1_Pin */
         GPIO_InitStruct.Pin  = B1_Pin;
@@ -560,18 +574,16 @@ static void MX_GPIO_Init(void)
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
         /*Configure GPIO pins : LIDAR_SCANNING_Pin SPI2_CS_Pin IMU_RUNNING_Pin
-           MOTOR_RUNNING_Pin PROTOCOL_FAILED_Pin */
+           MOTOR_RUNNING_Pin PROTOCOL_FAILED_Pin M_PHASE2_Pin */
         GPIO_InitStruct.Pin   = LIDAR_SCANNING_Pin | SPI2_CS_Pin | IMU_RUNNING_Pin |
-                                MOTOR_RUNNING_Pin | PROTOCOL_FAILED_Pin;
+                                MOTOR_RUNNING_Pin | PROTOCOL_FAILED_Pin | M_PHASE2_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
         HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-        /*Configure GPIO pins : M_MODE2_Pin BIN1_Pin BIN2_Pin AIN1_Pin
-                                 AIN2_Pin M_MODE1_Pin */
-        GPIO_InitStruct.Pin =
-                M_MODE2_Pin | BIN1_Pin | BIN2_Pin | AIN1_Pin | AIN2_Pin | M_MODE1_Pin;
+        /*Configure GPIO pins : M_PHASE1_Pin M_MODE_Pin */
+        GPIO_InitStruct.Pin   = M_PHASE1_Pin | M_MODE_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

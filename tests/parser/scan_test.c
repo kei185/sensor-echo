@@ -97,11 +97,31 @@ static void read_scan_frame_rejects_angle_without_check_bit(void)
         assert(result == 0u);
 }
 
+static void read_scan_frame_rejects_every_truncated_prefix(void)
+{
+        const uint8_t input[] = {
+                0xaau, 0x55u, 0x00u, 0x01u, 0x01u, 0x05u, 0x01u,
+                0x05u, 0x00u, 0x00u, 0x00u, 0x04u, 0x00u,
+        };
+        ParserScannedPoint actual = {0};
+
+        // 距離の途中まで読めていても、未完了のフレームを返さない。
+        for (size_t length = 0u; length < sizeof(input); ++length) {
+                parser_test_set_input(input, length);
+                assert(read_scan_frame(&actual) == 0u);
+        }
+
+        parser_test_set_input(input, sizeof(input));
+        assert(read_scan_frame(&actual) == 1u);
+        assert(actual.dist == 1u);
+}
+
 int main(void)
 {
         read_scan_frame_reads_points_after_two_byte_checksum();
         read_scan_frame_interpolates_angles_across_zero_degrees();
         read_scan_frame_rejects_invalid_packet_header();
         read_scan_frame_rejects_angle_without_check_bit();
+        read_scan_frame_rejects_every_truncated_prefix();
         return 0;
 }
