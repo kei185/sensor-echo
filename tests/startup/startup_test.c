@@ -8,6 +8,7 @@
 #include "startup.h"
 #include "time_sync.h"
 #include "lidar/core.h"
+#include "lidar/frequency.h"
 #include "lidar/sys.h"
 #include "lidar/translate.h"
 #include "tx/frame.h"
@@ -25,6 +26,7 @@ typedef enum
         EVENT_HOST_DEVICE_INFO,
         EVENT_LIDAR_HEALTH_REQUEST,
         EVENT_HOST_HEALTH_STATUS,
+        EVENT_LIDAR_FREQUENCY_SET,
         EVENT_HOST_READY,
         EVENT_TIME_SYNC,
         EVENT_RTC_SET,
@@ -46,6 +48,7 @@ static bool      malformed_health_reply;
 static bool      handshake_receive_failed;
 static bool      handshake_ack_failed;
 static bool      time_sync_failed;
+static bool      frequency_set_failed;
 static TxBufSlot startup_slot;
 static uint8_t   rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
 static uint32_t  rx_remain_bytes;
@@ -79,6 +82,7 @@ static void reset_test_state(void)
         handshake_receive_failed = false;
         handshake_ack_failed     = false;
         time_sync_failed         = false;
+        frequency_set_failed     = false;
         memset(&startup_slot, 0, sizeof(startup_slot));
         memset(rx_storage, 0, sizeof(rx_storage));
 }
@@ -232,6 +236,14 @@ HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length)
         return HAL_OK;
 }
 
+// 10 Hzへの設定がREADYより前に呼ばれることを確認する。
+bool lidar_set_scan_frequency(uint8_t hz)
+{
+        assert(hz == 10u);
+        record_event(EVENT_LIDAR_FREQUENCY_SET);
+        return !frequency_set_failed;
+}
+
 // 時刻同期本体は変更せず、startupから従来の順に呼ばれることを確認する。
 bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
 {
@@ -271,6 +283,7 @@ static void startup_follows_the_documented_order(void)
         // 検証: handshake ACKの後に既存の起動処理を続け、最後にDMAを開始する。
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
+                EVENT_LIDAR_FREQUENCY_SET,
                 EVENT_HOST_READY,
                 EVENT_TIME_SYNC,
                 EVENT_RTC_SET,
@@ -324,6 +337,7 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
         assert(!run_startup_sequence());
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
+                EVENT_LIDAR_FREQUENCY_SET,
                 EVENT_HOST_READY,
                 EVENT_TIME_SYNC,
                 EVENT_FAILURE_PIN_SET,
@@ -342,11 +356,29 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
         assert(host_receive_count == 4u);
 }
 
+static void failed_frequency_setting_stops_before_ready(void)
+{
+        // 10 Hzへの設定が失敗したら、READY・時刻同期・DMAへ進まない。
+        reset_test_state();
+        frequency_set_failed = true;
+        assert(!run_startup_sequence());
+        const Event expected[] = {
+                EVENT_HOST_HANDSHAKE_ACK,
+                EVENT_LIDAR_FREQUENCY_SET,
+                EVENT_FAILURE_PIN_SET,
+                EVENT_HOST_FAILURE,
+        };
+        assert(event_count == sizeof(expected) / sizeof(expected[0]));
+        assert(memcmp(events, expected, sizeof(expected)) == 0);
+        assert(host_receive_count == 2u);
+}
+
 int main(void)
 {
         startup_follows_the_documented_order();
         failed_handshake_receive_stops_startup();
         failed_handshake_ack_stops_startup();
         failed_time_sync_returns_to_handshake_on_retry();
+        failed_frequency_setting_stops_before_ready();
         return 0;
 }
