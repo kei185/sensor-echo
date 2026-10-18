@@ -27,7 +27,15 @@ MODE=1
 PHASE=0
 
 
+右 1 A
+左 2 B
 
 MOSI -> SDA
-MOSI -> SA0
+MISO -> SA0
+
+
+Lidar 青
+IMU 緑
+PROTOCOL 白
+MOTOR 赤
 

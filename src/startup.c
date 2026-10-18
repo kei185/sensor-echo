@@ -199,8 +199,6 @@ static bool wait_for_start_scan(void)
  */
 static bool fail_startup(uint8_t* tx_frame)
 {
-        HAL_GPIO_WritePin(PROTOCOL_FAILED_GPIO_Port, PROTOCOL_FAILED_Pin, GPIO_PIN_SET);
-
         if (tx_frame != NULL)
                 (void)send_host_system_message(
                         tx_frame,
@@ -250,38 +248,38 @@ bool run_startup_sequence(void)
                     sizeof(FRAME_MESSAGE_HANDSHAKE_ACK) - 1u))
                 return fail_startup(tx_frame);
 
-        // /**
-        //  * send initializing message
-        //  */
-        // bool initializing_sent = send_host_system_message(
-        //         tx_frame,
-        //         FRAME_TYPE_INITIALIZING,
-        //         FRAME_MESSAGE_INITIALIZING,
-        //         sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
-        // if (!initializing_sent)
-        //         return fail_startup(tx_frame);
+        /**
+         * send initializing message
+         */
+        bool initializing_sent = send_host_system_message(
+                tx_frame,
+                FRAME_TYPE_INITIALIZING,
+                FRAME_MESSAGE_INITIALIZING,
+                sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
+        if (!initializing_sent)
+                return fail_startup(tx_frame);
 
-        // /**
-        //  * forward device info
-        //  */
-        // bool device_info_forwarded = request_and_forward_lidar_message(
-        //         tx_frame,
-        //         MSG_TYPE_RX_SYS_INFO,
-        //         SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
-        //         SYS_TYPE_CODE_DEVICE_INFO);
-        // if (!device_info_forwarded)
-        //         return fail_startup(tx_frame);
+        /**
+         * forward device info
+         */
+        bool device_info_forwarded = request_and_forward_lidar_message(
+                tx_frame,
+                MSG_TYPE_RX_SYS_INFO,
+                SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
+                SYS_TYPE_CODE_DEVICE_INFO);
+        if (!device_info_forwarded)
+                return fail_startup(tx_frame);
 
-        // /**
-        //  * forward health
-        //  */
-        // bool health_status_forwarded = request_and_forward_lidar_message(
-        //         tx_frame,
-        //         MSG_TYPE_RX_HEALTH,
-        //         SYS_PACKET_HEALTH_CONTENT_SIZE,
-        //         SYS_TYPE_CODE_HEALTH);
-        // if (!health_status_forwarded)
-        //         return fail_startup(tx_frame);
+        /**
+         * forward health
+         */
+        bool health_status_forwarded = request_and_forward_lidar_message(
+                tx_frame,
+                MSG_TYPE_RX_HEALTH,
+                SYS_PACKET_HEALTH_CONTENT_SIZE,
+                SYS_TYPE_CODE_HEALTH);
+        if (!health_status_forwarded)
+                return fail_startup(tx_frame);
 
         /**
          * send ready

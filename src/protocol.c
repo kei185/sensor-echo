@@ -23,6 +23,7 @@ static uint8_t host_command_buf[HOST_MOTOR_COMMAND_SIZE];
 
 void loop()
 {
+        PROTOCOL_RUNNING_GPIO_Port->ODR ^= PROTOCOL_RUNNING_Pin;
         while (!run_startup_sequence())
                 ;
 
@@ -34,25 +35,18 @@ void loop()
         HAL_StatusTypeDef scan_start_status =
                 HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_SCAN], MSG_SIZE, 100);
 
-        if (scan_start_status != HAL_OK) {
-                LD2_GPIO_Port->ODR ^= LD2_Pin;
+        if (scan_start_status != HAL_OK)
                 Error_Handler();
-        }
 
         // // wait for meta frame for scan
         ParserMeta meta = {0};
         read_meta(&meta);
         if (meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
-            meta.type_code != SYS_TYPE_CODE_SCAN) {
-                HAL_GPIO_WritePin(PROTOCOL_FAILED_GPIO_Port, PROTOCOL_FAILED_Pin, 1);
-
+            meta.type_code != SYS_TYPE_CODE_SCAN)
                 Error_Handler();
-        }
 
-        if (!imu_setup()) {
-                LD2_GPIO_Port->ODR ^= LD2_Pin;
+        if (!imu_setup())
                 Error_Handler();
-        }
 
         LIDAR_SCANNING_GPIO_Port->ODR ^= LIDAR_SCANNING_Pin;
 
@@ -72,9 +66,10 @@ void loop()
                 if (imu_accel_ready && imu_rot_ready) {
                         imu_accel_ready = imu_rot_ready = false;
 
+                        IMU_RUNNING_GPIO_Port->ODR ^= IMU_RUNNING_Pin;
                         if (!imu_handler(tbs->_buf + TX_FRAME_HEADER_SIZE))
                                 continue;
-
+                        IMU_RUNNING_GPIO_Port->ODR ^= IMU_RUNNING_Pin;
                         len = tx_frame_write_header(
                                 tbs->_buf,
                                 CORE_TX_BUF_SIZE,
@@ -93,7 +88,9 @@ void loop()
                 if (motor_encoder_timeout) {
                         motor_encoder_timeout = false;
 
+                        MOTOR_RUNNING_GPIO_Port->ODR ^= MOTOR_RUNNING_Pin;
                         motor_timeout_handler(tbs->_buf + TX_FRAME_HEADER_SIZE);
+                        MOTOR_RUNNING_GPIO_Port->ODR ^= MOTOR_RUNNING_Pin;
 
                         len = tx_frame_write_header(
                                 tbs->_buf,

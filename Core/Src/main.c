@@ -545,7 +545,7 @@ static void MX_GPIO_Init(void)
         HAL_GPIO_WritePin(
                 GPIOB,
                 LIDAR_SCANNING_Pin | IMU_RUNNING_Pin | MOTOR_RUNNING_Pin |
-                        PROTOCOL_FAILED_Pin | M_PHASE2_Pin,
+                        PROTOCOL_RUNNING_Pin | M_PHASE2_Pin,
                 GPIO_PIN_RESET);
 
         /*Configure GPIO pin Output Level */
@@ -574,9 +574,9 @@ static void MX_GPIO_Init(void)
         HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
         /*Configure GPIO pins : LIDAR_SCANNING_Pin SPI2_CS_Pin IMU_RUNNING_Pin
-           MOTOR_RUNNING_Pin PROTOCOL_FAILED_Pin M_PHASE2_Pin */
+           MOTOR_RUNNING_Pin PROTOCOL_RUNNING_Pin M_PHASE2_Pin */
         GPIO_InitStruct.Pin   = LIDAR_SCANNING_Pin | SPI2_CS_Pin | IMU_RUNNING_Pin |
-                                MOTOR_RUNNING_Pin | PROTOCOL_FAILED_Pin | M_PHASE2_Pin;
+                                MOTOR_RUNNING_Pin | PROTOCOL_RUNNING_Pin | M_PHASE2_Pin;
         GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
         GPIO_InitStruct.Pull  = GPIO_NOPULL;
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -613,6 +613,8 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
         /* USER CODE BEGIN Error_Handler_Debug */
+        PROTOCOL_RUNNING_GPIO_Port->ODR &= ~PROTOCOL_RUNNING_Pin;
+        LD2_GPIO_Port->ODR |= LD2_Pin;
         /* User can add his own implementation to report the HAL error return
          * state */
         __disable_irq();
