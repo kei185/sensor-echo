@@ -28,4 +28,6 @@ PHASE=0
 
 
 
+MOSI -> SDA
+MOSI -> SA0
 

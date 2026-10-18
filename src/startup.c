@@ -199,10 +199,7 @@ static bool wait_for_start_scan(void)
  */
 static bool fail_startup(uint8_t* tx_frame)
 {
-        HAL_GPIO_WritePin(
-                INITIAL_HANDSHAKE_FAILED_GPIO_Port,
-                INITIAL_HANDSHAKE_FAILED_Pin,
-                GPIO_PIN_SET);
+        HAL_GPIO_WritePin(PROTOCOL_FAILED_GPIO_Port, PROTOCOL_FAILED_Pin, GPIO_PIN_SET);
 
         if (tx_frame != NULL)
                 (void)send_host_system_message(
