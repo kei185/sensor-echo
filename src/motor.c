@@ -13,16 +13,23 @@
 enum MOTOR_MODE GLOBAL_MOTOR_MODE = MOTOR_MODE_PHASE_ENABLE;
 
 const uint32_t MOTOR_COUNTER_SCALER  = 10u;
-bool           motor_encoder_timeout = false;
-uint32_t       motor_right_counter   = 0u;
-uint32_t       motor_left_counter    = 0u;
+volatile bool     motor_encoder_timeout = false;
+volatile uint32_t motor_right_counter   = 0u;
+volatile uint32_t motor_left_counter    = 0u;
 
 void init_motor(void)
 {
         motor_encoder_timeout = false;
         motor_right_counter = motor_left_counter = 0u;
-        HAL_TIM_Encoder_Start_IT(&htim3, TIM_CHANNEL_ALL);
-        HAL_TIM_Encoder_Start_IT(&htim4, TIM_CHANNEL_ALL);
+        __HAL_TIM_SET_COUNTER(&htim3, 0u);
+        __HAL_TIM_SET_COUNTER(&htim4, 0u);
+        __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_UPDATE);
+        __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE);
+        HAL_TIM_Base_Start_IT(&htim3);
+        HAL_TIM_Base_Start_IT(&htim4);
+        HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+        HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
+        // 周回は更新割り込みで数える。エンコーダ入力ごとの割り込みは使わない。
         HAL_TIM_Base_Start_IT(&htim5);
 
         // ENABLEを0%にしてからPHASE/ENABLEモードとPWMを有効にする。
@@ -46,11 +53,12 @@ void set_motor_mode(enum MOTOR_MODE mode)
 
 void motor1_forward(int8_t velocity)
 {
-        const uint32_t duty = velocity < 0 ? -(int32_t)velocity : velocity;
-        HAL_GPIO_WritePin(
-                M_PHASE1_GPIO_Port,
-                M_PHASE1_Pin,
-                velocity < 0 ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        if (velocity < 0 || velocity > MOTOR_MAX_DUTY_PERCENT)
+                return;
+
+        const uint32_t duty = velocity;
+        HAL_GPIO_WritePin(M_PHASE1_GPIO_Port, M_PHASE1_Pin, GPIO_PIN_RESET);
+        // PHASEは正転のまま、ENABLEのPWMだけを変更する。
 
         __HAL_TIM_SET_COMPARE(
                 &htim2,
@@ -60,11 +68,12 @@ void motor1_forward(int8_t velocity)
 
 void motor2_forward(int8_t velocity)
 {
-        const uint32_t duty = velocity < 0 ? -(int32_t)velocity : velocity;
-        HAL_GPIO_WritePin(
-                M_PHASE2_GPIO_Port,
-                M_PHASE2_Pin,
-                velocity < 0 ? GPIO_PIN_SET : GPIO_PIN_RESET);
+        if (velocity < 0 || velocity > MOTOR_MAX_DUTY_PERCENT)
+                return;
+
+        const uint32_t duty = velocity;
+        HAL_GPIO_WritePin(M_PHASE2_GPIO_Port, M_PHASE2_Pin, GPIO_PIN_RESET);
+        // PHASEは正転のまま、ENABLEのPWMだけを変更する。
 
         __HAL_TIM_SET_COMPARE(
                 &htim2,
@@ -80,20 +89,35 @@ void motor_stop(void)
 
 void motor_timeout_handler(uint8_t* buf)
 {
-        // 周回数はIRQで反映済みの前提。取得とリセットの間はIRQを止める。
-        // CNTの読み取りからゼロクリアまでに増えたカウントは失われる。
         const uint32_t primask = __get_PRIMASK();
         __disable_irq();
 
-        const int64_t left =
-                (int32_t)motor_left_counter * MOTOR_COUNTER_PERIOD + htim4.Instance->CNT;
-        motor_left_counter = htim4.Instance->CNT = 0u;
+        uint32_t left_counter  = motor_left_counter;
+        uint32_t left_count    = htim4.Instance->CNT;
+        uint32_t right_counter = motor_right_counter;
+        uint32_t right_count   = htim3.Instance->CNT;
 
-        const int64_t right =
-                (int32_t)motor_right_counter * MOTOR_COUNTER_PERIOD + htim3.Instance->CNT;
+        if (__HAL_TIM_GET_FLAG(&htim4, TIM_FLAG_UPDATE)) {
+                left_counter++;
+                left_count = htim4.Instance->CNT;
+        }
+        if (__HAL_TIM_GET_FLAG(&htim3, TIM_FLAG_UPDATE)) {
+                right_counter++;
+                right_count = htim3.Instance->CNT;
+        }
+
+        motor_left_counter = htim4.Instance->CNT = 0u;
+        __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE);
         motor_right_counter = htim3.Instance->CNT = 0u;
+        __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_UPDATE);
+        // 左右を先に取得し、IRQ未処理の周回も含めてCNTと更新フラグをリセットする。
+        // CNTを読み取ってからゼロにするまでの入力は失われる。
 
         __set_PRIMASK(primask);
+
+        const int64_t left  = (int32_t)left_counter * MOTOR_COUNTER_PERIOD + left_count;
+        const int64_t right = (int32_t)right_counter * MOTOR_COUNTER_PERIOD + right_count;
+        // 換算は左右の取得と割り込みマスクの復元を済ませてから行う。
 
         const int16_t left_q6 =
                 (int16_t)(left * WHEEL_ROTATION_Q6_SCALE / MOTOR_COUNTS_PER_REVOLUTION);
@@ -110,10 +134,11 @@ void motor_command_handler(uint8_t* buf)
         const int8_t right = (int8_t)buf[1];
 
         // 左右とも範囲内と確認してから、両輪の出力を更新する。
-        if (left < -MOTOR_MAX_DUTY_PERCENT || left > MOTOR_MAX_DUTY_PERCENT ||
-            right < -MOTOR_MAX_DUTY_PERCENT || right > MOTOR_MAX_DUTY_PERCENT)
+        if (left < 0 || left > MOTOR_MAX_DUTY_PERCENT ||
+            right < 0 || right > MOTOR_MAX_DUTY_PERCENT)
                 return;
 
-        motor1_forward(left);
-        motor2_forward(right);
+        motor2_forward(left);
+        motor1_forward(right);
+        // 実機の配線は右がモーター1、左がモーター2。エンコーダは右TIM3・左TIM4。
 }

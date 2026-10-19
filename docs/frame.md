@@ -85,27 +85,27 @@ The host sends a two-byte command followed by one signed PWM percentage per whee
 - Payload length: `2`
 - Payload: left wheel first, then right wheel; one signed 8-bit two's-complement integer each
 - Unit: signed PWM duty percentage (`%`)
-- Valid range: `-100` to `100`, inclusive
+- Valid range: `0` to `100`, inclusive; forward only
 - A two-byte command and its payload only; no TX frame header
 
-The magnitude sets PWM duty directly. The sign sets direction. Each field is
-one byte, so it has no byte order.
+The value sets forward PWM duty directly. Negative values are invalid. Each
+field is one byte, so it has no byte order.
 
 | Wire order | Byte offset | Field | Size | Format | Unit | Valid range |
 |---:|---:|---|---:|---|---|---|
 | 1st | `0` | Command | 2 bytes | `0xAA 0xA7` | - | Fixed |
-| 2nd | `2` | **Left** motor command | 1 byte | Signed 8-bit two's complement | PWM duty %; negative = reverse | `-100` to `100` |
-| 3rd | `3` | **Right** motor command | 1 byte | Signed 8-bit two's complement | PWM duty %; negative = reverse | `-100` to `100` |
+| 2nd | `2` | **Left** motor command | 1 byte | Signed 8-bit two's complement | Forward PWM duty % | `0` to `100` |
+| 3rd | `3` | **Right** motor command | 1 byte | Signed 8-bit two's complement | Forward PWM duty % | `0` to `100` |
 
 | Signed value | Direction | PWM duty | Driver behavior |
 |---|---|---:|---|
 | `1` to `100` | Forward | Value in % | Forward/brake |
 | `0` | Stopped | 0% | Brake low |
-| `-100` to `-1` | Reverse | Absolute value in % | Reverse/brake |
 
 The [Pololu DRV8835](https://www.pololu.com/product/2135/) uses PHASE/ENABLE
 mode: MODE is High, PHASE is Low for forward and High for reverse, and ENABLE
-receives PWM. ENABLE Low brakes the motor. The percentage controls PWM output;
+receives PWM. This firmware keeps PHASE Low and does not accept reverse commands.
+ENABLE Low brakes the motor. The percentage controls PWM output;
 it does not guarantee a measured wheel speed.
 
 The current source applies valid values without sending an ACK. An unknown
@@ -122,8 +122,8 @@ byte offset   0      1      2      3      4
               <-- command --><-- PWM % --->
 ```
 
-For left `+50%` and right `-100%`, the payload is `32 9C` in hexadecimal. The
-complete command is `AA A7 32 9C`. Both zero, `AA A7 00 00`, brakes both motors.
+For left `50%` and right `100%`, the payload is `32 64` in hexadecimal. The
+complete command is `AA A7 32 64`. Both zero, `AA A7 00 00`, brakes both motors.
 
 ### Time command
 
@@ -337,8 +337,11 @@ Direction: controller to host, type `0x03`.
 
 Size: 4 bytes per sample. Each sample reports the rotation change since the
 previous counter reset, not a cumulative position. The target sampling period
-is 100 ms (10 Hz) using TIM5. Encoder wraparound handling is not complete yet.
-Reverse encoder motion is outside the current scope.
+is 100 ms (10 Hz) using TIM5. Both encoders use TI12 (four counts per quadrature
+cycle), with 2800 counts per wheel revolution and an update after 28000 counts.
+The left wheel uses TIM4 and the right wheel uses TIM3. Pending update flags are
+included in each snapshot and cleared along with the counters. Reverse encoder
+motion is outside the current scope.
 
 The left wheel value comes first, followed by the right wheel value. Each value
 is a signed 16-bit Q6 wheel rotation count in two's complement and uses the

@@ -118,9 +118,9 @@ ignores invalid values without starting recovery.
 
 ```mermaid
 flowchart TD
-    command["Host sends AA A7 and left/right signed PWM percentages"] --> validate{"Both values in -100 to 100?"}
+    command["Host sends AA A7 and left/right signed PWM percentages"] --> validate{"Both values in 0 to 100?"}
     validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
-    validate -- Yes --> accept["Apply PWM duty from magnitude<br/>Negative: reverse; zero: brake"]
+    validate -- Yes --> accept["Apply forward PWM duty<br/>Zero: brake"]
     accept --> ack["Controller sends MOTOR ACK"]
     ack --> host{"Host received ACK?"}
     host -- Yes --> active["Continue normal communication"]

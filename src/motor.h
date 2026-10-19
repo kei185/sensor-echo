@@ -13,9 +13,9 @@ enum MOTOR_MODE
 extern enum MOTOR_MODE GLOBAL_MOTOR_MODE;
 
 extern const uint32_t MOTOR_COUNTER_SCALER;
-extern bool           motor_encoder_timeout;
-extern uint32_t       motor_right_counter;
-extern uint32_t       motor_left_counter;
+extern volatile bool     motor_encoder_timeout;
+extern volatile uint32_t motor_right_counter;
+extern volatile uint32_t motor_left_counter;
 
 void init_motor(void);
 void motor1_forward(int8_t velocity);
