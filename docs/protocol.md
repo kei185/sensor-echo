@@ -3,6 +3,9 @@
 Startup uses blocking UART transfers. Scanning uses circular RX DMA and
 software-started TX DMA.
 
+Before sending READY, the controller sets the LiDAR scan frequency to 10 Hz.
+It reads the current setting and adjusts it in 1 Hz or 0.1 Hz steps.
+
 TX slot ownership, queueing, and UART DMA dispatch are described in
 [tx.md](tx.md).
 
