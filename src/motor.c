@@ -92,29 +92,32 @@ void motor_timeout_handler(uint8_t* buf)
         const uint32_t primask = __get_PRIMASK();
         __disable_irq();
 
-        uint32_t left_counter = motor_left_counter;
-        uint32_t left_count   = htim4.Instance->CNT;
+        uint32_t left_counter  = motor_left_counter;
+        uint32_t left_count    = htim4.Instance->CNT;
+        uint32_t right_counter = motor_right_counter;
+        uint32_t right_count   = htim3.Instance->CNT;
+
         if (__HAL_TIM_GET_FLAG(&htim4, TIM_FLAG_UPDATE)) {
                 left_counter++;
                 left_count = htim4.Instance->CNT;
         }
-        const int64_t left = (int32_t)left_counter * MOTOR_COUNTER_PERIOD + left_count;
-        motor_left_counter = htim4.Instance->CNT = 0u;
-        __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE);
-
-        uint32_t right_counter = motor_right_counter;
-        uint32_t right_count   = htim3.Instance->CNT;
         if (__HAL_TIM_GET_FLAG(&htim3, TIM_FLAG_UPDATE)) {
                 right_counter++;
                 right_count = htim3.Instance->CNT;
         }
-        const int64_t right = (int32_t)right_counter * MOTOR_COUNTER_PERIOD + right_count;
+
+        motor_left_counter = htim4.Instance->CNT = 0u;
+        __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE);
         motor_right_counter = htim3.Instance->CNT = 0u;
         __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_UPDATE);
-        // IRQ未処理の周回も含めて読み、CNTと更新フラグをまとめてリセットする。
+        // 左右を先に取得し、IRQ未処理の周回も含めてCNTと更新フラグをリセットする。
         // CNTを読み取ってからゼロにするまでの入力は失われる。
 
         __set_PRIMASK(primask);
+
+        const int64_t left  = (int32_t)left_counter * MOTOR_COUNTER_PERIOD + left_count;
+        const int64_t right = (int32_t)right_counter * MOTOR_COUNTER_PERIOD + right_count;
+        // 換算は左右の取得と割り込みマスクの復元を済ませてから行う。
 
         const int16_t left_q6 =
                 (int16_t)(left * WHEEL_ROTATION_Q6_SCALE / MOTOR_COUNTS_PER_REVOLUTION);
