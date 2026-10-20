@@ -34,18 +34,20 @@ typedef enum
         EVENT_TIME_SYNC_REPORT,
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
+        EVENT_LIDAR_SCAN_META,
         EVENT_HOST_START_SCAN_ACK,
         EVENT_FAILURE_PIN_SET,
         EVENT_HOST_FAILURE,
 } Event;
 
-#define EVENT_CAPACITY 16u
+#define EVENT_CAPACITY 20u
 
 static Event     events[EVENT_CAPACITY];
 static size_t    event_count;
 static uint32_t  lidar_receive_count;
 static uint32_t  host_receive_count;
 static bool      malformed_health_reply;
+static bool              malformed_scan_meta;
 static bool      handshake_receive_failed;
 static bool      handshake_ack_failed;
 static bool      time_sync_failed;
@@ -83,6 +85,7 @@ static void reset_test_state(void)
         lidar_receive_count      = 0u;
         host_receive_count       = 0u;
         malformed_health_reply   = false;
+        malformed_scan_meta      = false;
         handshake_receive_failed = false;
         handshake_ack_failed     = false;
         time_sync_failed         = false;
@@ -178,6 +181,13 @@ HAL_StatusTypeDef HAL_UART_Receive(
                         huart->ErrorCode = 0x0Au;
                         return lidar_receive_status;
                 }
+                if (length == SYS_PACKET_META_SIZE) {
+                        write_lidar_reply(data, length, SYS_TYPE_CODE_SCAN, 0u);
+                        data[2] = 5u;
+                        data[5] = malformed_scan_meta ? 0u : 0x40u;
+                        record_event(EVENT_LIDAR_SCAN_META);
+                        return HAL_OK;
+                }
                 if (lidar_receive_count++ == 0u) {
                         write_lidar_reply(
                                 data,
@@ -221,6 +231,8 @@ uint64_t time_sync_get_unix_time_ms(void) { return UINT64_C(1791160123000); }
 
 void HAL_Delay(uint32_t milliseconds)
 {
+        if (milliseconds == 2000u)
+                return;
         assert(milliseconds == 500u);
         record_event(EVENT_LIDAR_RESET_WAIT);
 }
@@ -309,6 +321,8 @@ static void startup_follows_the_documented_order(void)
 
         // 実行
         assert(run_startup_sequence());
+        assert(events[event_count - 1u] == EVENT_HOST_START_SCAN_ACK);
+        assert(start_lidar_scan());
 
         // 検証: handshake ACKの後に既存の起動処理を続け、最後にDMAを開始する。
         const Event expected[] = {
@@ -326,6 +340,8 @@ static void startup_follows_the_documented_order(void)
                 EVENT_RTC_SET,
                 EVENT_TIME_SYNC_REPORT,
                 EVENT_HOST_START_SCAN_ACK,
+                EVENT_LIDAR_SCAN_REQUEST,
+                EVENT_LIDAR_SCAN_META,
                 EVENT_DMA_STARTED,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
@@ -398,7 +414,7 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
         time_sync_failed   = false;
         assert(run_startup_sequence());
         assert(events[0] == EVENT_HOST_HANDSHAKE_ACK);
-        assert(events[event_count - 1u] == EVENT_DMA_STARTED);
+        assert(events[event_count - 1u] == EVENT_HOST_START_SCAN_ACK);
         assert(host_receive_count == 4u);
 }
 
@@ -421,13 +437,28 @@ static void uart_failures_report_the_stage_status_and_original_error_bits(void)
 
         reset_test_state();
         dma_start_status = HAL_BUSY;
-        assert(!run_startup_sequence());
+        assert(run_startup_sequence());
+        assert(!start_lidar_scan());
         assert(strstr(failure_message, "lidar DMA: UART4 RX DMA HAL_BUSY") != NULL);
 
         reset_test_state();
         malformed_health_reply = true;
         assert(!run_startup_sequence());
         assert(strcmp(failure_message, "STARTUP FAILED: lidar health") == 0);
+
+        reset_test_state();
+        assert(run_startup_sequence());
+        lidar_receive_status = HAL_TIMEOUT;
+        assert(!start_lidar_scan());
+        assert(strstr(failure_message, "lidar scan meta: UART4 RX HAL_TIMEOUT") != NULL);
+        assert(events[event_count - 2u] == EVENT_LIDAR_SCAN_REQUEST);
+
+        reset_test_state();
+        assert(run_startup_sequence());
+        malformed_scan_meta = true;
+        assert(!start_lidar_scan());
+        assert(strcmp(failure_message, "STARTUP FAILED: lidar scan meta") == 0);
+        assert(events[event_count - 2u] == EVENT_LIDAR_SCAN_META);
 }
 
 int main(void)

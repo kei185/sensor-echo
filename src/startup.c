@@ -98,7 +98,8 @@ static bool is_expected_lidar_reply(
         const uint8_t* reply,
         size_t         expected_reply_length,
         uint32_t       expected_content_length,
-        SysTypeCode    expected_type)
+        SysTypeCode    expected_type,
+        SysResMode     expected_mode)
 {
         // Validate the fixed meta header before handing the bytes to the stream parser.
         if (expected_reply_length != SYS_PACKET_META_SIZE + expected_content_length)
@@ -112,13 +113,14 @@ static bool is_expected_lidar_reply(
         bool has_expected_header =
                 reply[0] == SYS_PACKET_HEADER_MSB && reply[1] == SYS_PACKET_HEADER_LSB;
         // 0x3fffffff keeps the content length stored in bits 0-29.
-        bool has_expected_length = (length_mode & 0x3fffffffu) == expected_content_length;
+        bool has_expected_length = expected_mode == SYS_RES_MODE_CONTINUOUS ||
+                                   (length_mode & 0x3fffffffu) == expected_content_length;
         // Shifting by 30 moves the response mode from bits 30-31 to bits 0-1.
-        bool is_single_response = (length_mode >> 30u) == SYS_RES_MODE_SINGLE;
+        bool has_expected_mode = (length_mode >> 30u) == expected_mode;
         // Meta byte 6 identifies the content that follows the meta header.
         bool has_expected_type = reply[6] == (uint8_t)expected_type;
 
-        return has_expected_header && has_expected_length && is_single_response &&
+        return has_expected_header && has_expected_length && has_expected_mode &&
                has_expected_type;
 }
 
@@ -164,8 +166,12 @@ static bool request_and_forward_lidar_message(
                 return false;
 
         // verify received frame
-        bool is_expected_reply =
-                is_expected_lidar_reply(rx_buf, reply_length, content_length, type);
+        bool is_expected_reply = is_expected_lidar_reply(
+                rx_buf,
+                reply_length,
+                content_length,
+                type,
+                SYS_RES_MODE_SINGLE);
 
         if (!is_expected_reply)
                 return false;
@@ -241,16 +247,6 @@ static bool fail_startup(uint8_t* tx_frame, const char* stage)
         return false;
 }
 
-/**
- * @brief Complete the blocking handshake and start continuous LiDAR reception.
- *
- * The sequence reports initialization, forwards device information and health,
- * reports readiness, waits for host permission, acknowledges it, arms RX DMA,
- * and starts scanning. Any failed step sets the startup-failure pin and stops
- * the sequence.
- *
- * @return true after the ACK and LiDAR start-scan command are both sent.
- */
 bool run_startup_sequence(void)
 {
         uart_failure[0] = '\0';
@@ -365,16 +361,44 @@ bool run_startup_sequence(void)
         if (!start_scan_ack_sent)
                 return fail_startup(tx_frame, "start scan ACK");
 
-        // Arm RX before the scan command so the first scan bytes cannot be lost.
-        // set global buffer object
-        setup_nonblocking_rx();
+        return true;
+}
+// 初期化と時刻同期を済ませ、hostのSTART_SCANにACKを返すところまで進める。
 
-        // setting dma peripheral
+bool start_lidar_scan(void)
+{
+        TxBufSlot* tx_slot = get_empty_buf();
+        if (tx_slot == NULL)
+                return fail_startup(NULL, "TX buffer");
+        uint8_t* tx_frame = tx_slot->_buf;
+
+        HAL_StatusTypeDef scan_status = HAL_UART_Transmit(
+                &huart4,
+                MSG[MSG_TYPE_SCAN],
+                MSG_SIZE,
+                STARTUP_UART_TIMEOUT_MS);
+        if (!startup_uart_ok(&huart4, scan_status, "TX"))
+                return fail_startup(tx_frame, "lidar scan");
+
+        uint8_t           meta[SYS_PACKET_META_SIZE];
+        HAL_StatusTypeDef meta_status =
+                HAL_UART_Receive(&huart4, meta, sizeof(meta), STARTUP_UART_TIMEOUT_MS);
+        if (!startup_uart_ok(&huart4, meta_status, "RX"))
+                return fail_startup(tx_frame, "lidar scan meta");
+        if (!is_expected_lidar_reply(
+                    meta,
+                    sizeof(meta),
+                    0u,
+                    SYS_TYPE_CODE_SCAN,
+                    SYS_RES_MODE_CONTINUOUS))
+                return fail_startup(tx_frame, "lidar scan meta");
+
+        setup_nonblocking_rx();
         HAL_StatusTypeDef dma_start_status =
                 HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE);
-
         if (!startup_uart_ok(&huart4, dma_start_status, "RX DMA"))
                 return fail_startup(tx_frame, "lidar DMA");
 
         return true;
 }
+// メタ7バイトはblockingで受信し、確認後すぐにSCANデータのDMA受信へ切り替える。

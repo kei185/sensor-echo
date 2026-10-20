@@ -41,18 +41,21 @@ sequenceDiagram
     Controller->>Host: Time-sync report
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
-    Controller->>Controller: Start circular LiDAR RX DMA
     Controller->>Controller: Arm 4-byte host command RX using interrupts
     Controller->>LiDAR: Start scan command A5 60
-    LiDAR-->>Controller: Continuous scan stream
-    Controller->>Controller: Check LiDAR meta header and configure IMU
+    LiDAR-->>Controller: 7-byte scan meta (blocking receive)
+    Controller->>Controller: Check scan meta, then start circular LiDAR RX DMA
+    LiDAR-->>Controller: Continuous scan data
+    Controller->>Controller: Configure IMU
     Controller->>Controller: Enter normal communication loop
 ```
 
 Soft reset is the first LiDAR command, followed by a 500 ms restart wait.
 Device information and health checks run before scanning. The LiDAR
-manual allows only the stop command during scanning. RX DMA starts before
-`A5 60`, so the controller can receive the first scan bytes.
+manual allows only the stop command during scanning. After `A5 60`, the controller
+receives exactly seven meta bytes with blocking UART and checks the response mode
+and type. It then switches immediately to circular RX DMA for scan data. The meta
+check does not wait for additional scan bytes in the DMA ring.
 The controller sends `START SCAN ACK` after it accepts the host command and
 before it starts RX DMA. The ACK confirms the host command only. It does not
 confirm DMA startup, the `A5 60` UART transfer, or a LiDAR response.
@@ -61,6 +64,9 @@ If UART communication or reply validation fails, the controller sends a
 `STARTUP FAILED` system frame when possible and returns to the handshake stage.
 The host retries the handshake, then repeats startup and time synchronization
 before starting a new scan.
+
+Failures while sending `A5 60`, receiving or validating scan meta, or starting DMA
+also report their stage. These failures stop the protocol via `Error_Handler()`.
 
 The failure payload includes the startup stage. UART failures also include the
 UART number, operation, HAL status, and the original `ErrorCode` bits, for example:

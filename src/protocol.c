@@ -12,9 +12,7 @@
 #include "stm32f4xx_hal_def.h"
 #include "tx/frame.h"
 #include "tx/header.h"
-#include "lidar/sys.h"
 #include "lidar/core.h"
-#include "lidar/parser/meta.h"
 #include "lidar/translate.h"
 #include "imu/handler.h"
 #include "motor.h"
@@ -31,21 +29,8 @@ void loop()
             HAL_OK)
                 Error_Handler();
 
-        // // send start scan command
-        HAL_StatusTypeDef scan_start_status =
-                HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_SCAN], MSG_SIZE, 100);
-
-        if (scan_start_status != HAL_OK)
+        if (!start_lidar_scan())
                 Error_Handler();
-
-        // // wait for meta frame for scan
-        ParserMeta meta = {0};
-        if (read_meta(&meta) == NULL || meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
-            meta.type_code != SYS_TYPE_CODE_SCAN) {
-                if (!recover_lidar_rx())
-                        Error_Handler();
-        }
-        // メタ受信中にDMAが止まった場合も復旧し、以降のscanフレームから再開する。
 
         if (!imu_setup())
                 Error_Handler();
