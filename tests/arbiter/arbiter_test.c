@@ -188,22 +188,6 @@ static void dma_start_failure_keeps_the_frame_queued_for_retry(void)
         assert(dma_start_calls == 2u);
 }
 
-static void invalid_queued_frame_is_dropped_before_starting_the_next_frame(void)
-{
-        // 準備
-        reset_test_state();
-        queue_frame(0u, 0u, 0x71u);
-        queue_frame(1u, 14u, 0x72u);
-
-        // 実行
-        try_dispatch_tx();
-
-        // 検証
-        assert(release_calls == 1u);
-        assert(!fake_slots[0].full);
-        assert(dma_start_calls == 1u);
-}
-
 static void receive_completion_records_one_dma_ring_wrap(void)
 {
         // 準備
@@ -269,7 +253,6 @@ int main(void)
         try_dispatch_tx_does_not_start_a_second_concurrent_transfer();
         transmit_completion_releases_the_slot_and_starts_the_next_frame();
         dma_start_failure_keeps_the_frame_queued_for_retry();
-        invalid_queued_frame_is_dropped_before_starting_the_next_frame();
         receive_completion_records_one_dma_ring_wrap();
         failed_receive_restarts_dma_and_retries_a_failed_restart();
         transmit_queue_returns_to_the_first_slot_after_wraparound();

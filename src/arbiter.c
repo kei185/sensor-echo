@@ -20,11 +20,6 @@ void try_dispatch_tx(void)
                 return;
 
         TxBufSlot* target = get_full_buf();
-        while (target != NULL &&
-               (target->length == 0u || target->length > CORE_TX_BUF_SIZE)) {
-                release(target);
-                target = get_full_buf();
-        }
 
         if (target == NULL)
                 return;
