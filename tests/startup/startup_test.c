@@ -21,6 +21,9 @@ typedef enum
 {
         EVENT_HOST_HANDSHAKE_ACK,
         EVENT_HOST_INITIALIZING,
+        EVENT_LIDAR_RESET,
+        EVENT_LIDAR_RESET_WAIT,
+        EVENT_LIDAR_RX_CLEARED,
         EVENT_LIDAR_DEVICE_REQUEST,
         EVENT_HOST_DEVICE_INFO,
         EVENT_LIDAR_HEALTH_REQUEST,
@@ -47,6 +50,7 @@ static bool      handshake_receive_failed;
 static bool      handshake_ack_failed;
 static bool      time_sync_failed;
 static HAL_StatusTypeDef lidar_receive_status;
+static HAL_StatusTypeDef lidar_reset_status;
 static HAL_StatusTypeDef dma_start_status;
 static char              failure_message[160];
 static TxBufSlot startup_slot;
@@ -83,6 +87,7 @@ static void reset_test_state(void)
         handshake_ack_failed     = false;
         time_sync_failed         = false;
         lidar_receive_status     = HAL_OK;
+        lidar_reset_status       = HAL_OK;
         dma_start_status         = HAL_OK;
         huart2.ErrorCode         = 0u;
         huart4.ErrorCode         = 0u;
@@ -112,6 +117,12 @@ HAL_StatusTypeDef HAL_UART_Transmit(
 
         if (huart == &huart4) {
                 assert(length == MSG_SIZE);
+                if (memcmp(data, MSG[MSG_TYPE_SOFT_RESTART], MSG_SIZE) == 0) {
+                        record_event(EVENT_LIDAR_RESET);
+                        if (lidar_reset_status != HAL_OK)
+                                huart->ErrorCode = 0x08u;
+                        return lidar_reset_status;
+                }
                 if (memcmp(data, MSG[MSG_TYPE_RX_SYS_INFO], MSG_SIZE) == 0)
                         record_event(EVENT_LIDAR_DEVICE_REQUEST);
                 else if (memcmp(data, MSG[MSG_TYPE_RX_HEALTH], MSG_SIZE) == 0)
@@ -208,6 +219,18 @@ HAL_StatusTypeDef HAL_UART_Receive(
 
 uint64_t time_sync_get_unix_time_ms(void) { return UINT64_C(1791160123000); }
 
+void HAL_Delay(uint32_t milliseconds)
+{
+        assert(milliseconds == 500u);
+        record_event(EVENT_LIDAR_RESET_WAIT);
+}
+
+void clear_uart_overrun(UART_HandleTypeDef* uart)
+{
+        assert(uart == &huart4);
+        record_event(EVENT_LIDAR_RX_CLEARED);
+}
+
 TxBufSlot* get_empty_buf(void) { return &startup_slot; }
 
 void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state)
@@ -291,6 +314,9 @@ static void startup_follows_the_documented_order(void)
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
                 EVENT_HOST_INITIALIZING,
+                EVENT_LIDAR_RESET,
+                EVENT_LIDAR_RESET_WAIT,
+                EVENT_LIDAR_RX_CLEARED,
                 EVENT_LIDAR_DEVICE_REQUEST,
                 EVENT_HOST_DEVICE_INFO,
                 EVENT_LIDAR_HEALTH_REQUEST,
@@ -350,6 +376,9 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
                 EVENT_HOST_INITIALIZING,
+                EVENT_LIDAR_RESET,
+                EVENT_LIDAR_RESET_WAIT,
+                EVENT_LIDAR_RX_CLEARED,
                 EVENT_LIDAR_DEVICE_REQUEST,
                 EVENT_HOST_DEVICE_INFO,
                 EVENT_LIDAR_HEALTH_REQUEST,
@@ -375,6 +404,14 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
 
 static void uart_failures_report_the_stage_status_and_original_error_bits(void)
 {
+        reset_test_state();
+        lidar_reset_status = HAL_ERROR;
+        assert(!run_startup_sequence());
+        assert(strcmp(failure_message,
+                      "STARTUP FAILED: lidar reset: UART4 TX HAL_ERROR "
+                      "error=0x00000008") == 0);
+        assert(lidar_receive_count == 0u);
+
         reset_test_state();
         lidar_receive_status = HAL_TIMEOUT;
         assert(!run_startup_sequence());

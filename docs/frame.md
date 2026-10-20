@@ -24,6 +24,8 @@ sequenceDiagram
         end
     end
     Controller->>Host: INITIALIZING system frame
+    Controller->>LiDAR: Soft reset A5 40 (no response)
+    Controller->>Controller: Wait 500 ms and clear stale UART4 RX data/errors
     Controller->>LiDAR: Device information request A5 90
     LiDAR-->>Controller: Device information
     Controller->>Host: Device information system frame
@@ -47,6 +49,7 @@ sequenceDiagram
     Controller->>Controller: Enter normal communication loop
 ```
 
+Soft reset is the first LiDAR command, followed by a 500 ms restart wait.
 Device information and health checks run before scanning. The LiDAR
 manual allows only the stop command during scanning. RX DMA starts before
 `A5 60`, so the controller can receive the first scan bytes.

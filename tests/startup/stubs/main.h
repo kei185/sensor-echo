@@ -23,5 +23,8 @@ extern GPIO_TypeDef initial_handshake_failed_port;
 #define INITIAL_HANDSHAKE_FAILED_Pin       0x0004u
 
 void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state);
+void HAL_Delay(uint32_t milliseconds);
+void clear_uart_overrun(UART_HandleTypeDef* uart);
+#define __HAL_UART_CLEAR_OREFLAG(uart) clear_uart_overrun(uart)
 
 #endif /* STARTUP_TEST_MAIN_H */

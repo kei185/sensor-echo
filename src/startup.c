@@ -293,6 +293,18 @@ bool run_startup_sequence(void)
         if (!initializing_sent)
                 return fail_startup(tx_frame, "initializing");
 
+        HAL_StatusTypeDef reset_status = HAL_UART_Transmit(
+                &huart4,
+                MSG[MSG_TYPE_SOFT_RESTART],
+                MSG_SIZE,
+                STARTUP_UART_TIMEOUT_MS);
+        if (!startup_uart_ok(&huart4, reset_status, "TX"))
+                return fail_startup(tx_frame, "lidar reset");
+
+        HAL_Delay(500u);
+        __HAL_UART_CLEAR_OREFLAG(&huart4);
+        // resetは応答なし。再起動を待ち、前回の受信データとエラーフラグを捨てる。
+
         /**
          * forward device info
          */
