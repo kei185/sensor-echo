@@ -7,8 +7,16 @@
 #include "main.h"
 #include "lidar/core.h"
 #include "time_sync.h"
+#include "startup.h"
 #include "tx/frame.h"
 
+bool startup_uart_ok(
+        UART_HandleTypeDef* uart, HAL_StatusTypeDef status, const char* operation)
+{
+        (void)uart;
+        (void)operation;
+        return status == HAL_OK;
+}
 UART_HandleTypeDef huart2;
 RTC_HandleTypeDef  hrtc = {.Init = {.SynchPrediv = 255u}};
 

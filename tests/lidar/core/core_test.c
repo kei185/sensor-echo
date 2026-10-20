@@ -105,6 +105,29 @@ static void frame_deadline_is_not_extended_by_successful_reads(void)
         assert(RX_BUF->read_idx == 40);
 }
 
+static void empty_ring_end_times_out_without_underflowing_the_lap(void)
+{
+        reset_reader_at(CORE_RX_BUF_SIZE - 1u);
+        mock_tick      = 0u;
+        mock_tick_step = 1u;
+        start_read_timeout();
+        assert(!is_safe_read());
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == CORE_RX_BUF_SIZE - 1u);
+        assert(RX_BUF->lap == 0u);
+        mock_tick_step = 0u;
+
+        set_dma_write_index(2);
+        increment_lap();
+        start_read_timeout();
+        assert(is_safe_read());
+        (void)read_byte();
+        assert(RX_BUF->read_idx == 0);
+        assert(RX_BUF->lap == 0u);
+        assert(!is_safe_read());
+}
+
 static void timeouts_work_across_tick_wraparound(void)
 {
         reset_reader_at(0);
@@ -172,6 +195,7 @@ int main(void)
         overrun_detection_uses_signed_ring_index_differences();
         dma_terminal_count_is_normalized_to_the_ring_start();
         empty_receive_times_out_without_advancing_the_reader();
+        empty_ring_end_times_out_without_underflowing_the_lap();
         frame_deadline_is_not_extended_by_successful_reads();
         timeouts_work_across_tick_wraparound();
         queue_wraps_after_five_slots_and_preserves_fifo_order();

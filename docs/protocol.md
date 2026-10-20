@@ -205,6 +205,11 @@ flowchart LR
 Recovery starts from bytes that arrive after alignment. It does not wait for
 another full ring wrap.
 
+For a UART4 or RX DMA error, the error callback requests recovery. The main loop
+aborts the remaining RX transfer, resets the RX ring, and restarts circular DMA.
+It discards the partial frame and retries on the next loop if abort or restart
+fails. Host communication and already queued TX frames continue.
+
 ## Data checks
 
 ```mermaid

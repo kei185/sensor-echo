@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "main.h"
@@ -15,6 +16,29 @@
 #include "tx/header.h"
 
 #define STARTUP_UART_TIMEOUT_MS 100u
+
+static char uart_failure[96];
+
+bool startup_uart_ok(
+        UART_HandleTypeDef* uart, HAL_StatusTypeDef status, const char* operation)
+{
+        if (status == HAL_OK)
+                return true;
+
+        const char* name = status == HAL_TIMEOUT ? "HAL_TIMEOUT"
+                           : status == HAL_BUSY  ? "HAL_BUSY"
+                                                 : "HAL_ERROR";
+        snprintf(
+                uart_failure,
+                sizeof(uart_failure),
+                "UART%u %s %s error=0x%08lX",
+                uart == &huart2 ? 2u : 4u,
+                operation,
+                name,
+                (unsigned long)uart->ErrorCode);
+        return false;
+}
+// UART2への通知でErrorCodeが消える前に、元のステータスとエラービットを保存する。
 
 /**
  * @brief Build and send one system-message frame to the host.
@@ -54,7 +78,7 @@ static bool send_host_system_message(
                 (uint16_t)frame_length,
                 STARTUP_UART_TIMEOUT_MS);
 
-        return transmit_status == HAL_OK;
+        return startup_uart_ok(&huart2, transmit_status, "TX");
 }
 
 /**
@@ -122,7 +146,7 @@ static bool request_and_forward_lidar_message(
                 MSG_SIZE,
                 STARTUP_UART_TIMEOUT_MS);
 
-        if (request_status != HAL_OK)
+        if (!startup_uart_ok(&huart4, request_status, "TX"))
                 return false;
 
         setup_blocking_rx(reply_length);
@@ -136,7 +160,7 @@ static bool request_and_forward_lidar_message(
                 (uint16_t)reply_length,
                 STARTUP_UART_TIMEOUT_MS);
 
-        if (receive_status != HAL_OK)
+        if (!startup_uart_ok(&huart4, receive_status, "RX"))
                 return false;
 
         // verify received frame
@@ -157,7 +181,7 @@ static bool request_and_forward_lidar_message(
                 (uint16_t)frame_length,
                 STARTUP_UART_TIMEOUT_MS);
 
-        return forward_status == HAL_OK;
+        return startup_uart_ok(&huart2, forward_status, "forward TX");
 }
 
 /**
@@ -179,7 +203,7 @@ static bool wait_for_start_scan(void)
                         HOST_COMMAND_SIZE,
                         HAL_MAX_DELAY);
 
-                if (receive_status != HAL_OK)
+                if (!startup_uart_ok(&huart2, receive_status, "RX"))
                         return false;
 
                 bool is_start_scan = memcmp(command,
@@ -197,14 +221,23 @@ static bool wait_for_start_scan(void)
  * @param tx_frame Writable TX slot, or NULL when no slot was available.
  * @return false so callers can return this function directly.
  */
-static bool fail_startup(uint8_t* tx_frame)
+static bool fail_startup(uint8_t* tx_frame, const char* stage)
 {
-        if (tx_frame != NULL)
+        char message[160];
+        int  length = snprintf(
+                message,
+                sizeof(message),
+                "%s: %s%s%s",
+                FRAME_MESSAGE_STARTUP_FAILED,
+                stage,
+                uart_failure[0] ? ": " : "",
+                uart_failure);
+        if (tx_frame != NULL && length > 0 && (size_t)length < sizeof(message))
                 (void)send_host_system_message(
                         tx_frame,
                         FRAME_TYPE_STARTUP_FAILED,
-                        FRAME_MESSAGE_STARTUP_FAILED,
-                        sizeof(FRAME_MESSAGE_STARTUP_FAILED) - 1u);
+                        message,
+                        (uint16_t)length);
         return false;
 }
 
@@ -220,10 +253,11 @@ static bool fail_startup(uint8_t* tx_frame)
  */
 bool run_startup_sequence(void)
 {
+        uart_failure[0] = '\0';
         // Startup owns this free slot until all blocking host transmissions finish.
         TxBufSlot* tx_slot = get_empty_buf();
         if (tx_slot == NULL)
-                return fail_startup(NULL);
+                return fail_startup(NULL, "TX buffer");
         uint8_t* tx_frame = tx_slot->_buf;
 
         // hostが3秒ごとに送るhandshakeを待つ。それ以外のコマンドでは進まない。
@@ -234,8 +268,8 @@ bool run_startup_sequence(void)
                         command,
                         HOST_COMMAND_SIZE,
                         HAL_MAX_DELAY);
-                if (receive_status != HAL_OK)
-                        return fail_startup(tx_frame);
+                if (!startup_uart_ok(&huart2, receive_status, "RX"))
+                        return fail_startup(tx_frame, "handshake");
         } while (memcmp(command,
                         HOST_COMMANDS[HOST_COMMAND_HANDSHAKE],
                         HOST_COMMAND_SIZE) != 0);
@@ -246,7 +280,7 @@ bool run_startup_sequence(void)
                     FRAME_TYPE_HANDSHAKE_ACK,
                     FRAME_MESSAGE_HANDSHAKE_ACK,
                     sizeof(FRAME_MESSAGE_HANDSHAKE_ACK) - 1u))
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "handshake ACK");
 
         /**
          * send initializing message
@@ -257,7 +291,7 @@ bool run_startup_sequence(void)
                 FRAME_MESSAGE_INITIALIZING,
                 sizeof(FRAME_MESSAGE_INITIALIZING) - 1u);
         if (!initializing_sent)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "initializing");
 
         /**
          * forward device info
@@ -268,7 +302,7 @@ bool run_startup_sequence(void)
                 SYS_PACKET_DEVICE_INFO_CONTENT_SIZE,
                 SYS_TYPE_CODE_DEVICE_INFO);
         if (!device_info_forwarded)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "lidar info");
 
         /**
          * forward health
@@ -279,7 +313,7 @@ bool run_startup_sequence(void)
                 SYS_PACKET_HEALTH_CONTENT_SIZE,
                 SYS_TYPE_CODE_HEALTH);
         if (!health_status_forwarded)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "lidar health");
 
         /**
          * send ready
@@ -290,23 +324,23 @@ bool run_startup_sequence(void)
                 FRAME_MESSAGE_READY,
                 sizeof(FRAME_MESSAGE_READY) - 1u);
         if (!ready_sent)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "ready");
 
         TimeSyncSession session         = {0};
         uint8_t*        time_sync_frame = get_empty_buf()->_buf;
         if (!time_sync_handle_start(time_sync_frame, &session))
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "time sync");
         if (!time_sync_set_rtc(&session))
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "RTC set");
         if (!time_sync_send_report_if_ready(time_sync_frame, &session))
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "time sync report");
 
         /**
          * wait for start command from the host
          */
         bool start_scan_requested = wait_for_start_scan();
         if (!start_scan_requested)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "start scan");
 
         /**
          * send ack for start scan command
@@ -317,7 +351,7 @@ bool run_startup_sequence(void)
                 FRAME_MESSAGE_START_SCAN_ACK,
                 sizeof(FRAME_MESSAGE_START_SCAN_ACK) - 1u);
         if (!start_scan_ack_sent)
-                return fail_startup(tx_frame);
+                return fail_startup(tx_frame, "start scan ACK");
 
         // Arm RX before the scan command so the first scan bytes cannot be lost.
         // set global buffer object
@@ -327,8 +361,8 @@ bool run_startup_sequence(void)
         HAL_StatusTypeDef dma_start_status =
                 HAL_UART_Receive_DMA(&huart4, RX_BUF->_buf, CORE_RX_BUF_SIZE);
 
-        if (dma_start_status != HAL_OK)
-                return fail_startup(tx_frame);
+        if (!startup_uart_ok(&huart4, dma_start_status, "RX DMA"))
+                return fail_startup(tx_frame, "lidar DMA");
 
         return true;
 }

@@ -8,6 +8,16 @@
 #include "stm32f4xx_hal_uart.h"
 
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart4;
+
+static uint8_t           rx_storage[CORE_RX_BUF_SIZE];
+static RxBuf             rx_buf = {._buf = rx_storage};
+const RxBuf* const       RX_BUF = &rx_buf;
+static uint32_t          rx_reset_calls;
+static uint32_t          rx_start_calls;
+static uint32_t          rx_abort_calls;
+static HAL_StatusTypeDef rx_start_result;
+static HAL_StatusTypeDef rx_abort_result;
 
 static TxBufSlot fake_slots[CORE_TX_BUF_NUM];
 static uint8_t   fake_reader_head;
@@ -30,6 +40,11 @@ static void reset_test_state(void)
         dma_start_data      = NULL;
         dma_start_length    = 0u;
         huart2.gState       = HAL_UART_STATE_READY;
+        rx_reset_calls      = 0u;
+        rx_start_calls      = 0u;
+        rx_abort_calls      = 0u;
+        rx_start_result     = HAL_OK;
+        rx_abort_result     = HAL_OK;
 }
 
 static void queue_frame(uint8_t index, uint32_t length, uint8_t marker)
@@ -56,6 +71,30 @@ void release(TxBufSlot* slot)
 }
 
 void increment_lap(void) { ++lap_increment_calls; }
+
+void setup_nonblocking_rx(void)
+{
+        ++rx_reset_calls;
+        rx_buf.read_idx = 0;
+        rx_buf.lap      = 0u;
+}
+
+HAL_StatusTypeDef
+HAL_UART_Receive_DMA(UART_HandleTypeDef* uart, uint8_t* data, uint16_t length)
+{
+        assert(uart == &huart4);
+        assert(data == rx_storage);
+        assert(length == CORE_RX_BUF_SIZE);
+        ++rx_start_calls;
+        return rx_start_result;
+}
+
+HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef* uart)
+{
+        assert(uart == &huart4);
+        ++rx_abort_calls;
+        return rx_abort_result;
+}
 
 HAL_StatusTypeDef
 HAL_UART_Transmit_DMA(UART_HandleTypeDef* huart, const uint8_t* data, uint16_t length)
@@ -177,6 +216,31 @@ static void receive_completion_records_one_dma_ring_wrap(void)
         assert(lap_increment_calls == 1u);
 }
 
+static void failed_receive_restarts_dma_and_retries_a_failed_restart(void)
+{
+        reset_test_state();
+        assert(!recover_lidar_rx());
+        rx_buf.read_idx = 4000;
+        rx_buf.lap      = 2u;
+        rx_start_result = HAL_BUSY;
+        rx_abort_result = HAL_TIMEOUT;
+        dma_receive_error_handler();
+        assert(rx_start_calls == 0u);
+        assert(recover_lidar_rx());
+        assert(rx_abort_calls == 1u && rx_start_calls == 0u);
+
+        rx_abort_result = HAL_OK;
+        assert(recover_lidar_rx());
+        assert(rx_start_calls == 1u);
+        assert(rx_buf.read_idx == 0 && rx_buf.lap == 0u);
+
+        rx_start_result = HAL_OK;
+        assert(recover_lidar_rx());
+        assert(rx_start_calls == 2u && rx_reset_calls == 2u);
+        assert(!recover_lidar_rx());
+        assert(rx_start_calls == 2u);
+}
+
 static void transmit_queue_returns_to_the_first_slot_after_wraparound(void)
 {
         // 準備
@@ -207,6 +271,7 @@ int main(void)
         dma_start_failure_keeps_the_frame_queued_for_retry();
         invalid_queued_frame_is_dropped_before_starting_the_next_frame();
         receive_completion_records_one_dma_ring_wrap();
+        failed_receive_restarts_dma_and_retries_a_failed_restart();
         transmit_queue_returns_to_the_first_slot_after_wraparound();
         return 0;
 }

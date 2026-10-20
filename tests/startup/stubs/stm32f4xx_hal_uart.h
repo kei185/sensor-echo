@@ -14,6 +14,7 @@ typedef enum
 typedef struct
 {
         void* Instance;
+        uint32_t ErrorCode;
 } UART_HandleTypeDef;
 
 #define HAL_MAX_DELAY UINT32_MAX

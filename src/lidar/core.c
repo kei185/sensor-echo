@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <cmsis_gcc.h>
-#include <stdlib.h>
 
 #include "stm32f446xx.h"
 #include "stm32f4xx_hal.h"
@@ -10,20 +9,8 @@
 
 // TODO このファイルデカい
 
-/*
- * is_safe_read() requires:
- *
- *     write_idx - (read_idx + 1) > 1
- *
- * which is equivalent to:
- *
- *     read_idx < write_idx - 2
- *
- * A blocking reply has no moving DMA write head, so expose a virtual write
- * position two bytes past the received data. This makes the last real byte
- * readable while the virtual guard bytes remain unreadable.
- */
 #define BLOCKING_READ_GUARD_SIZE 2u
+// blocking受信でも末尾まで読めるよう、受信済み範囲の後ろに仮想の2バイトを置く。
 
 // データが途切れた待ちは短く切り、フレーム全体にも上限を設ける。
 // 最大775バイトのscanは230400 bpsで約34msかかるため、全体には40msを許す。
@@ -44,16 +31,6 @@ static RxBuf _RX_BUF = {
 const RxBuf* const RX_BUF = &_RX_BUF;
 
 static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
-
-static inline int32_t next_idx(void)
-{
-        int32_t n = _RX_BUF.read_idx + 1;
-
-        if (n >= (int32_t)CORE_RX_BUF_SIZE)
-                return 0;
-
-        return n;
-};
 
 static inline void increment(void)
 {
@@ -94,12 +71,10 @@ void increment_lap() { _RX_BUF.lap++; }
  */
 bool is_safe_read()
 {
-        int32_t diff = (write_idx() - next_idx());
-
-        if (abs(diff) <= 1)
-                return false;
-
-        return true;
+        uint32_t available =
+                (uint32_t)(write_idx() - _RX_BUF.read_idx + (int32_t)CORE_RX_BUF_SIZE) %
+                CORE_RX_BUF_SIZE;
+        return available > BLOCKING_READ_GUARD_SIZE;
 }
 
 void start_read_timeout(void)

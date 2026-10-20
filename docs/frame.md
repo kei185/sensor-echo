@@ -7,8 +7,7 @@ The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
 Initialization starts after this exchange. For protocol errors and recovery,
 see [protocol.md](protocol.md#connection-and-recovery).
 
-The diagram shows the current startup path. `INITIALIZING`, device information,
-and health transfers are disabled in this path. `MOTOR ACK` and recovery during
+The diagram shows the current startup path. `MOTOR ACK` and host recovery during
 normal communication are planned.
 
 ```mermaid
@@ -24,6 +23,13 @@ sequenceDiagram
             Controller->>Host: HANDSHAKE ACK system frame
         end
     end
+    Controller->>Host: INITIALIZING system frame
+    Controller->>LiDAR: Device information request A5 90
+    LiDAR-->>Controller: Device information
+    Controller->>Host: Device information system frame
+    Controller->>LiDAR: Health request A5 92
+    LiDAR-->>Controller: Health status
+    Controller->>Host: Health system frame
     Controller->>Host: READY system frame
     Host->>Controller: Time sync start AA A4
     Controller->>Host: TIME SYNC START ACK
@@ -41,7 +47,7 @@ sequenceDiagram
     Controller->>Controller: Enter normal communication loop
 ```
 
-Device information and health checks can be restored before scanning. The LiDAR
+Device information and health checks run before scanning. The LiDAR
 manual allows only the stop command during scanning. RX DMA starts before
 `A5 60`, so the controller can receive the first scan bytes.
 The controller sends `START SCAN ACK` after it accepts the host command and
@@ -52,6 +58,11 @@ If UART communication or reply validation fails, the controller sends a
 `STARTUP FAILED` system frame when possible and returns to the handshake stage.
 The host retries the handshake, then repeats startup and time synchronization
 before starting a new scan.
+
+The failure payload includes the startup stage. UART failures also include the
+UART number, operation, HAL status, and the original `ErrorCode` bits, for example:
+`STARTUP FAILED: lidar info: UART4 RX HAL_TIMEOUT error=0x00000000`.
+The frame type remains `0x08`; the payload is text without a trailing NUL.
 
 ## Host-to-Controller Commands
 
@@ -144,6 +155,8 @@ The Time frame uses this byte layout:
 
 The host performs this four-message exchange once. The controller uses the four
 timestamps to set its RTC, then sends one time-sync report.
+The RTC uses LSI with prescalers `128 * 250` for its nominal 32 kHz clock.
+Actual LSI frequency still varies, so this does not calibrate its clock accuracy.
 
 ## Time Synchronization
 

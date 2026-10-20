@@ -40,10 +40,12 @@ void loop()
 
         // // wait for meta frame for scan
         ParserMeta meta = {0};
-        read_meta(&meta);
-        if (meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
-            meta.type_code != SYS_TYPE_CODE_SCAN)
-                Error_Handler();
+        if (read_meta(&meta) == NULL || meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
+            meta.type_code != SYS_TYPE_CODE_SCAN) {
+                if (!recover_lidar_rx())
+                        Error_Handler();
+        }
+        // メタ受信中にDMAが止まった場合も復旧し、以降のscanフレームから再開する。
 
         if (!imu_setup())
                 Error_Handler();
@@ -55,6 +57,9 @@ void loop()
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.
                 try_dispatch_tx();
+
+                if (recover_lidar_rx())
+                        continue;
 
                 // if (scan_stop_requested)
                 // stop scan and send ack
@@ -113,7 +118,7 @@ void loop()
                 }
 
                 len = translate_scan_frame(tbs->_buf);
-                if (len == 0u || is_lapped()) {
+                if (recover_lidar_rx() || len == 0u || is_lapped()) {
                         reset_read_idx();
                         continue;
                 }
