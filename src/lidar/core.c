@@ -14,8 +14,12 @@
 
 // データが途切れた待ちは短く切り、フレーム全体にも上限を設ける。
 // 最大775バイトのscanは230400 bpsで約34msかかるため、全体には40msを許す。
-#define LIDAR_BYTE_TIMEOUT_MS  2u
+#define LIDAR_BYTE_TIMEOUT_MS  20u
 #define LIDAR_FRAME_TIMEOUT_MS 40u
+
+_Static_assert(
+        (CORE_RX_BUF_SIZE & (CORE_RX_BUF_SIZE - 1u)) == 0u,
+        "RX buffer size must be a power of two");
 
 static uint32_t read_started_at;
 static bool     read_timed_out;
@@ -71,10 +75,9 @@ void increment_lap() { _RX_BUF.lap++; }
  */
 bool is_safe_read()
 {
-        uint32_t available =
-                (uint32_t)(write_idx() - _RX_BUF.read_idx + (int32_t)CORE_RX_BUF_SIZE) %
-                CORE_RX_BUF_SIZE;
-        return available > BLOCKING_READ_GUARD_SIZE;
+        int32_t diff = write_idx() - _RX_BUF.read_idx;
+        return ((uint32_t)diff & (CORE_RX_BUF_SIZE - 1u)) > BLOCKING_READ_GUARD_SIZE;
+        // 4096バイトのringなので、折り返しは下位12bitで扱う。
 }
 
 void start_read_timeout(void)

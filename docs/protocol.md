@@ -43,7 +43,7 @@ It does not wait for the main loop. Motor commands send no ACK. The current
 path has no RX queue, incomplete-command timeout, or byte-by-byte
 resynchronization.
 
-LiDAR parsing stops after 2 ms without a readable byte, or 40 ms for the
+LiDAR parsing stops after 20 ms without a readable byte, or 40 ms for the
 whole frame. The partial frame is discarded so the main loop can continue
 other sensor and TX work. Motor commands can run in the interrupt while
 LiDAR parsing waits. At 230400 bps, the largest scan packet takes about
