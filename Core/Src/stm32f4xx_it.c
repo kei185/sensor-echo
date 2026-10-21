@@ -384,6 +384,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
                 dma_receive_complete_handler();
 }
 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
+{
+        if (huart == &huart4)
+                dma_receive_error_handler();
+}
+
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)
 {
         if (huart == &huart2)

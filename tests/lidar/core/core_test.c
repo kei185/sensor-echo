@@ -10,11 +10,17 @@ DMA_Stream_TypeDef mock_dma1_stream2;
 
 static uint32_t mock_tick;
 static uint32_t mock_tick_step;
+static uint32_t mock_dma_ready_at;
+static uint32_t mock_dma_ready_size = 3u;
 
 uint32_t HAL_GetTick(void)
 {
         uint32_t tick = mock_tick;
         mock_tick += mock_tick_step;
+        if (mock_dma_ready_at != 0u && tick >= mock_dma_ready_at) {
+                mock_dma1_stream2.NDTR = CORE_RX_BUF_SIZE - mock_dma_ready_size;
+                mock_dma_ready_at = 0u;
+        }
         return tick;
 }
 
@@ -69,7 +75,7 @@ static void empty_receive_times_out_without_advancing_the_reader(void)
         assert(read_byte() == 0u);
         assert(has_read_timed_out());
         assert(RX_BUF->read_idx == 0);
-        assert(mock_tick < 110u);
+        assert(mock_tick >= 120u && mock_tick < 130u);
         mock_tick_step = 0u;
 
         // 後からデータが来ても、失敗したフレームの続きとしては読まない。
@@ -83,6 +89,47 @@ static void empty_receive_times_out_without_advancing_the_reader(void)
         assert(read_byte() == 0u);
         assert(!has_read_timed_out());
         assert(RX_BUF->read_idx == 1);
+}
+
+static void byte_wait_can_exceed_two_ms_within_the_frame_deadline(void)
+{
+        reset_reader_at(0);
+        RX_BUF->_buf[0] = 0xa5u;
+        mock_tick         = 0u;
+        mock_tick_step    = 1u;
+        mock_dma_ready_at = 10u;
+        start_read_timeout();
+
+        assert(read_byte() == 0xa5u);
+        assert(!has_read_timed_out());
+        assert(RX_BUF->read_idx == 1);
+        assert(mock_tick >= 10u && mock_tick < 40u);
+
+        RX_BUF->_buf[1] = 0x5au;
+        mock_dma_ready_at   = mock_tick + 10u;
+        mock_dma_ready_size = 4u;
+        assert(read_byte() == 0x5au);
+        assert(!has_read_timed_out());
+        assert(RX_BUF->read_idx == 2);
+        assert(mock_tick >= 20u && mock_tick < 40u);
+        mock_dma_ready_size = 3u;
+        mock_tick_step = 0u;
+}
+
+static void frame_deadline_can_expire_before_the_byte_wait_limit(void)
+{
+        reset_reader_at(0);
+        mock_tick      = 0u;
+        mock_tick_step = 0u;
+        start_read_timeout();
+
+        mock_tick      = 25u;
+        mock_tick_step = 1u;
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == 0);
+        assert(mock_tick >= 40u && mock_tick < 45u);
+        mock_tick_step = 0u;
 }
 
 static void frame_deadline_is_not_extended_by_successful_reads(void)
@@ -105,6 +152,29 @@ static void frame_deadline_is_not_extended_by_successful_reads(void)
         assert(RX_BUF->read_idx == 40);
 }
 
+static void empty_ring_end_times_out_without_underflowing_the_lap(void)
+{
+        reset_reader_at(CORE_RX_BUF_SIZE - 1u);
+        mock_tick      = 0u;
+        mock_tick_step = 1u;
+        start_read_timeout();
+        assert(!is_safe_read());
+        assert(read_byte() == 0u);
+        assert(has_read_timed_out());
+        assert(RX_BUF->read_idx == CORE_RX_BUF_SIZE - 1u);
+        assert(RX_BUF->lap == 0u);
+        mock_tick_step = 0u;
+
+        set_dma_write_index(2);
+        increment_lap();
+        start_read_timeout();
+        assert(is_safe_read());
+        (void)read_byte();
+        assert(RX_BUF->read_idx == 0);
+        assert(RX_BUF->lap == 0u);
+        assert(!is_safe_read());
+}
+
 static void timeouts_work_across_tick_wraparound(void)
 {
         reset_reader_at(0);
@@ -112,11 +182,11 @@ static void timeouts_work_across_tick_wraparound(void)
         mock_tick_step = 1u;
         start_read_timeout();
 
-        // 1バイトの待ち時間がtickの一周をまたいでも戻ってくる。
+        // バイトの待ち時間がtickの一周をまたいでも20msで戻ってくる。
         assert(read_byte() == 0u);
         assert(has_read_timed_out());
         assert(RX_BUF->read_idx == 0);
-        assert(mock_tick < 10u);
+        assert(mock_tick < 30u);
 
         mock_tick_step = 0u;
         mock_tick      = UINT32_MAX - 10u;
@@ -172,6 +242,9 @@ int main(void)
         overrun_detection_uses_signed_ring_index_differences();
         dma_terminal_count_is_normalized_to_the_ring_start();
         empty_receive_times_out_without_advancing_the_reader();
+        empty_ring_end_times_out_without_underflowing_the_lap();
+        byte_wait_can_exceed_two_ms_within_the_frame_deadline();
+        frame_deadline_can_expire_before_the_byte_wait_limit();
         frame_deadline_is_not_extended_by_successful_reads();
         timeouts_work_across_tick_wraparound();
         queue_wraps_after_five_slots_and_preserves_fifo_order();

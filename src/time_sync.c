@@ -10,6 +10,7 @@
 #include "stm32f4xx_hal_uart.h"
 
 #include "time_sync.h"
+#include "startup.h"
 #include "lidar/core.h"
 #include "tx/frame.h"
 #include "tx/header.h"
@@ -96,7 +97,11 @@ send_host_frame(uint8_t* tx_frame, FrameType frame_type, size_t payload_length)
                 tx_frame,
                 (uint16_t)frame_length,
                 TIME_SYNC_UART_TIMEOUT_MS);
-        return transmit_status == HAL_OK;
+        const char* operation = frame_type == FRAME_TYPE_TIME_SYNC_START_ACK
+                                        ? "sync ACK TX"
+                                : frame_type == FRAME_TYPE_TIME_ACK ? "time ACK TX"
+                                                                    : "sync report TX";
+        return startup_uart_ok(&huart2, transmit_status, operation);
 }
 
 static void uint64_to_decimal(uint64_t value, char to[UINT64_DECIMAL_TEXT_SIZE])
@@ -259,7 +264,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                 time_sync_start_frame,
                 HOST_COMMAND_SIZE,
                 HAL_MAX_DELAY);
-        if (time_sync_start_status != HAL_OK)
+        if (!startup_uart_ok(&huart2, time_sync_start_status, "sync start RX"))
                 return false;
         // verify command if its time sync start
         if (memcmp(time_sync_start_frame,
@@ -289,7 +294,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
                 time_frame,
                 TIME_SYNC_TIME_FRAME_SIZE,
                 HAL_MAX_DELAY);
-        if (receive_status != HAL_OK)
+        if (!startup_uart_ok(&huart2, receive_status, "time RX"))
                 return false;
 
         // prepare response time

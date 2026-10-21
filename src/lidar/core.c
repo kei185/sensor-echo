@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <cmsis_gcc.h>
-#include <stdlib.h>
 
 #include "stm32f446xx.h"
 #include "stm32f4xx_hal.h"
@@ -10,25 +9,17 @@
 
 // TODO このファイルデカい
 
-/*
- * is_safe_read() requires:
- *
- *     write_idx - (read_idx + 1) > 1
- *
- * which is equivalent to:
- *
- *     read_idx < write_idx - 2
- *
- * A blocking reply has no moving DMA write head, so expose a virtual write
- * position two bytes past the received data. This makes the last real byte
- * readable while the virtual guard bytes remain unreadable.
- */
 #define BLOCKING_READ_GUARD_SIZE 2u
+// blocking受信でも末尾まで読めるよう、受信済み範囲の後ろに仮想の2バイトを置く。
 
 // データが途切れた待ちは短く切り、フレーム全体にも上限を設ける。
 // 最大775バイトのscanは230400 bpsで約34msかかるため、全体には40msを許す。
-#define LIDAR_BYTE_TIMEOUT_MS  2u
+#define LIDAR_BYTE_TIMEOUT_MS  20u
 #define LIDAR_FRAME_TIMEOUT_MS 40u
+
+_Static_assert(
+        (CORE_RX_BUF_SIZE & (CORE_RX_BUF_SIZE - 1u)) == 0u,
+        "RX buffer size must be a power of two");
 
 static uint32_t read_started_at;
 static bool     read_timed_out;
@@ -44,16 +35,6 @@ static RxBuf _RX_BUF = {
 const RxBuf* const RX_BUF = &_RX_BUF;
 
 static volatile uint32_t blocking_remain_bytes = CORE_RX_BUF_SIZE;
-
-static inline int32_t next_idx(void)
-{
-        int32_t n = _RX_BUF.read_idx + 1;
-
-        if (n >= (int32_t)CORE_RX_BUF_SIZE)
-                return 0;
-
-        return n;
-};
 
 static inline void increment(void)
 {
@@ -94,12 +75,9 @@ void increment_lap() { _RX_BUF.lap++; }
  */
 bool is_safe_read()
 {
-        int32_t diff = (write_idx() - next_idx());
-
-        if (abs(diff) <= 1)
-                return false;
-
-        return true;
+        int32_t diff = write_idx() - _RX_BUF.read_idx;
+        return ((uint32_t)diff & (CORE_RX_BUF_SIZE - 1u)) > BLOCKING_READ_GUARD_SIZE;
+        // 4096バイトのringなので、折り返しは下位12bitで扱う。
 }
 
 void start_read_timeout(void)
@@ -110,12 +88,12 @@ void start_read_timeout(void)
 
 bool has_read_timed_out(void)
 {
-        // unsignedの差分で、tickが一周した場合も経過時間を求める。
         if ((uint32_t)(HAL_GetTick() - read_started_at) >= LIDAR_FRAME_TIMEOUT_MS)
                 read_timed_out = true;
 
         return read_timed_out;
 }
+// フレームの40msは、バイトを読み進めても延長しない。
 
 /**
  * @brief read a byte from the buffer if buffer is safe to read,
@@ -128,14 +106,13 @@ uint8_t read_byte(void)
 {
         const uint32_t wait_started_at = HAL_GetTick();
         while (!is_safe_read()) {
-                if (has_read_timed_out() ||
-                    (uint32_t)(HAL_GetTick() - wait_started_at) >= LIDAR_BYTE_TIMEOUT_MS) {
+                if (has_read_timed_out() || (uint32_t)(HAL_GetTick() - wait_started_at) >=
+                                                    LIDAR_BYTE_TIMEOUT_MS) {
                         read_timed_out = true;
                         return 0u;
                 }
         }
 
-        // 失敗後は残りを読み進めず、parser側でフレーム全体を破棄する。
         if (has_read_timed_out())
                 return 0u;
 

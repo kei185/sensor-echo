@@ -43,7 +43,7 @@ It does not wait for the main loop. Motor commands send no ACK. The current
 path has no RX queue, incomplete-command timeout, or byte-by-byte
 resynchronization.
 
-LiDAR parsing stops after 2 ms without a readable byte, or 40 ms for the
+LiDAR parsing stops after 20 ms without a readable byte, or 40 ms for the
 whole frame. The partial frame is discarded so the main loop can continue
 other sensor and TX work. Motor commands can run in the interrupt while
 LiDAR parsing waits. At 230400 bps, the largest scan packet takes about
@@ -154,6 +154,11 @@ flowchart LR
 RX DMA continues while all TX slots are busy. The CPU read position stays
 unchanged, so the next free-slot check can detect whether DMA passed it.
 
+LiDAR reads have a 40 ms deadline measured from the start of frame parsing.
+Each byte read also has a 20 ms wait limit. Successful reads do not extend the
+frame deadline. When either limit is reached, the parser discards the incomplete
+frame and returns control to the main loop.
+
 ## RX ring positions
 
 `write_idx` is the next DMA destination. `read_idx` is the next byte for the
@@ -204,6 +209,11 @@ flowchart LR
 
 Recovery starts from bytes that arrive after alignment. It does not wait for
 another full ring wrap.
+
+For a UART4 or RX DMA error, the error callback requests recovery. The main loop
+aborts the remaining RX transfer, resets the RX ring, and restarts circular DMA.
+It discards the partial frame and retries on the next loop if abort or restart
+fails. Host communication and already queued TX frames continue.
 
 ## Data checks
 

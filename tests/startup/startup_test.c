@@ -21,6 +21,9 @@ typedef enum
 {
         EVENT_HOST_HANDSHAKE_ACK,
         EVENT_HOST_INITIALIZING,
+        EVENT_LIDAR_RESET,
+        EVENT_LIDAR_RESET_WAIT,
+        EVENT_LIDAR_RX_CLEARED,
         EVENT_LIDAR_DEVICE_REQUEST,
         EVENT_HOST_DEVICE_INFO,
         EVENT_LIDAR_HEALTH_REQUEST,
@@ -31,21 +34,27 @@ typedef enum
         EVENT_TIME_SYNC_REPORT,
         EVENT_DMA_STARTED,
         EVENT_LIDAR_SCAN_REQUEST,
+        EVENT_LIDAR_SCAN_META,
         EVENT_HOST_START_SCAN_ACK,
         EVENT_FAILURE_PIN_SET,
         EVENT_HOST_FAILURE,
 } Event;
 
-#define EVENT_CAPACITY 16u
+#define EVENT_CAPACITY 20u
 
 static Event     events[EVENT_CAPACITY];
 static size_t    event_count;
 static uint32_t  lidar_receive_count;
 static uint32_t  host_receive_count;
 static bool      malformed_health_reply;
+static bool              malformed_scan_meta;
 static bool      handshake_receive_failed;
 static bool      handshake_ack_failed;
 static bool      time_sync_failed;
+static HAL_StatusTypeDef lidar_receive_status;
+static HAL_StatusTypeDef lidar_reset_status;
+static HAL_StatusTypeDef dma_start_status;
+static char              failure_message[160];
 static TxBufSlot startup_slot;
 static uint8_t   rx_storage[SYS_PACKET_DEVICE_INFO_FRAME_SIZE];
 static uint32_t  rx_remain_bytes;
@@ -76,9 +85,16 @@ static void reset_test_state(void)
         lidar_receive_count      = 0u;
         host_receive_count       = 0u;
         malformed_health_reply   = false;
+        malformed_scan_meta      = false;
         handshake_receive_failed = false;
         handshake_ack_failed     = false;
         time_sync_failed         = false;
+        lidar_receive_status     = HAL_OK;
+        lidar_reset_status       = HAL_OK;
+        dma_start_status         = HAL_OK;
+        huart2.ErrorCode         = 0u;
+        huart4.ErrorCode         = 0u;
+        failure_message[0]       = '\0';
         memset(&startup_slot, 0, sizeof(startup_slot));
         memset(rx_storage, 0, sizeof(rx_storage));
 }
@@ -104,6 +120,12 @@ HAL_StatusTypeDef HAL_UART_Transmit(
 
         if (huart == &huart4) {
                 assert(length == MSG_SIZE);
+                if (memcmp(data, MSG[MSG_TYPE_SOFT_RESTART], MSG_SIZE) == 0) {
+                        record_event(EVENT_LIDAR_RESET);
+                        if (lidar_reset_status != HAL_OK)
+                                huart->ErrorCode = 0x08u;
+                        return lidar_reset_status;
+                }
                 if (memcmp(data, MSG[MSG_TYPE_RX_SYS_INFO], MSG_SIZE) == 0)
                         record_event(EVENT_LIDAR_DEVICE_REQUEST);
                 else if (memcmp(data, MSG[MSG_TYPE_RX_HEALTH], MSG_SIZE) == 0)
@@ -116,6 +138,7 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         }
 
         assert(huart == &huart2);
+        huart->ErrorCode = 0u;
         if (payload_equals(data, length, "HANDSHAKE ACK")) {
                 assert(data[5] == FRAME_TYPE_HANDSHAKE_ACK);
                 record_event(EVENT_HOST_HANDSHAKE_ACK);
@@ -127,8 +150,12 @@ HAL_StatusTypeDef HAL_UART_Transmit(
         } else if (payload_equals(data, length, "READY")) {
                 assert(data[5] == FRAME_TYPE_READY);
                 record_event(EVENT_HOST_READY);
-        } else if (payload_equals(data, length, "STARTUP FAILED")) {
-                assert(data[5] == FRAME_TYPE_STARTUP_FAILED);
+        } else if (length >= TX_FRAME_HEADER_SIZE &&
+                   data[5] == FRAME_TYPE_STARTUP_FAILED) {
+                size_t payload_length = length - TX_FRAME_HEADER_SIZE;
+                assert(payload_length < sizeof(failure_message));
+                memcpy(failure_message, data + TX_FRAME_HEADER_SIZE, payload_length);
+                failure_message[payload_length] = '\0';
                 record_event(EVENT_HOST_FAILURE);
         } else if (payload_equals(data, length, "START SCAN ACK")) {
                 assert(data[5] == FRAME_TYPE_START_SCAN_ACK);
@@ -150,6 +177,17 @@ HAL_StatusTypeDef HAL_UART_Receive(
 {
         if (huart == &huart4) {
                 assert(timeout != HAL_MAX_DELAY);
+                if (lidar_receive_status != HAL_OK) {
+                        huart->ErrorCode = 0x0Au;
+                        return lidar_receive_status;
+                }
+                if (length == SYS_PACKET_META_SIZE) {
+                        write_lidar_reply(data, length, SYS_TYPE_CODE_SCAN, 0u);
+                        data[2] = 5u;
+                        data[5] = malformed_scan_meta ? 0u : 0x40u;
+                        record_event(EVENT_LIDAR_SCAN_META);
+                        return HAL_OK;
+                }
                 if (lidar_receive_count++ == 0u) {
                         write_lidar_reply(
                                 data,
@@ -170,8 +208,10 @@ HAL_StatusTypeDef HAL_UART_Receive(
         assert(huart == &huart2);
         assert(length == HOST_COMMAND_SIZE);
         assert(timeout == HAL_MAX_DELAY);
-        if (handshake_receive_failed)
+        if (handshake_receive_failed) {
+                huart->ErrorCode = 0x08u;
                 return HAL_ERROR;
+        }
 
         uint32_t receive_index = host_receive_count++;
         if (receive_index == 0u || receive_index == 2u) {
@@ -188,6 +228,20 @@ HAL_StatusTypeDef HAL_UART_Receive(
 }
 
 uint64_t time_sync_get_unix_time_ms(void) { return UINT64_C(1791160123000); }
+
+void HAL_Delay(uint32_t milliseconds)
+{
+        if (milliseconds == 2000u)
+                return;
+        assert(milliseconds == 500u);
+        record_event(EVENT_LIDAR_RESET_WAIT);
+}
+
+void clear_uart_overrun(UART_HandleTypeDef* uart)
+{
+        assert(uart == &huart4);
+        record_event(EVENT_LIDAR_RX_CLEARED);
+}
 
 TxBufSlot* get_empty_buf(void) { return &startup_slot; }
 
@@ -229,7 +283,7 @@ HAL_UART_Receive_DMA(UART_HandleTypeDef* huart, uint8_t* data, uint16_t length)
         assert(data == RX_BUF->_buf);
         assert(length == CORE_RX_BUF_SIZE);
         record_event(EVENT_DMA_STARTED);
-        return HAL_OK;
+        return dma_start_status;
 }
 
 // 時刻同期本体は変更せず、startupから従来の順に呼ばれることを確認する。
@@ -267,22 +321,33 @@ static void startup_follows_the_documented_order(void)
 
         // 実行
         assert(run_startup_sequence());
+        assert(events[event_count - 1u] == EVENT_HOST_START_SCAN_ACK);
+        assert(start_lidar_scan());
 
         // 検証: handshake ACKの後に既存の起動処理を続け、最後にDMAを開始する。
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
+                EVENT_HOST_INITIALIZING,
+                EVENT_LIDAR_RESET,
+                EVENT_LIDAR_RESET_WAIT,
+                EVENT_LIDAR_RX_CLEARED,
+                EVENT_LIDAR_DEVICE_REQUEST,
+                EVENT_HOST_DEVICE_INFO,
+                EVENT_LIDAR_HEALTH_REQUEST,
+                EVENT_HOST_HEALTH_STATUS,
                 EVENT_HOST_READY,
                 EVENT_TIME_SYNC,
                 EVENT_RTC_SET,
                 EVENT_TIME_SYNC_REPORT,
                 EVENT_HOST_START_SCAN_ACK,
+                EVENT_LIDAR_SCAN_REQUEST,
+                EVENT_LIDAR_SCAN_META,
                 EVENT_DMA_STARTED,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
         assert(host_receive_count == 4u);
-        // mainでコメントアウト中のセンサー情報取得は再開していない。
-        assert(lidar_receive_count == 0u);
+        assert(lidar_receive_count == 2u);
 }
 
 static void failed_handshake_receive_stops_startup(void)
@@ -292,12 +357,14 @@ static void failed_handshake_receive_stops_startup(void)
         handshake_receive_failed = true;
         assert(!run_startup_sequence());
         const Event expected[] = {
-                EVENT_FAILURE_PIN_SET,
                 EVENT_HOST_FAILURE,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
         assert(host_receive_count == 0u);
+        assert(strcmp(failure_message,
+                      "STARTUP FAILED: handshake: UART2 RX HAL_ERROR error=0x00000008") ==
+               0);
 }
 
 static void failed_handshake_ack_stops_startup(void)
@@ -308,12 +375,12 @@ static void failed_handshake_ack_stops_startup(void)
         assert(!run_startup_sequence());
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
-                EVENT_FAILURE_PIN_SET,
                 EVENT_HOST_FAILURE,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
         assert(host_receive_count == 2u);
+        assert(strstr(failure_message, "handshake ACK: UART2 TX HAL_ERROR") != NULL);
 }
 
 static void failed_time_sync_returns_to_handshake_on_retry(void)
@@ -324,22 +391,74 @@ static void failed_time_sync_returns_to_handshake_on_retry(void)
         assert(!run_startup_sequence());
         const Event expected[] = {
                 EVENT_HOST_HANDSHAKE_ACK,
+                EVENT_HOST_INITIALIZING,
+                EVENT_LIDAR_RESET,
+                EVENT_LIDAR_RESET_WAIT,
+                EVENT_LIDAR_RX_CLEARED,
+                EVENT_LIDAR_DEVICE_REQUEST,
+                EVENT_HOST_DEVICE_INFO,
+                EVENT_LIDAR_HEALTH_REQUEST,
+                EVENT_HOST_HEALTH_STATUS,
                 EVENT_HOST_READY,
                 EVENT_TIME_SYNC,
-                EVENT_FAILURE_PIN_SET,
                 EVENT_HOST_FAILURE,
         };
         assert(event_count == sizeof(expected) / sizeof(expected[0]));
         assert(memcmp(events, expected, sizeof(expected)) == 0);
+        assert(strcmp(failure_message, "STARTUP FAILED: time sync") == 0);
 
         // protocolと同様に、失敗後にstartupをもう一度呼ぶ。
         event_count        = 0u;
         host_receive_count = 0u;
+        lidar_receive_count = 0u;
         time_sync_failed   = false;
         assert(run_startup_sequence());
         assert(events[0] == EVENT_HOST_HANDSHAKE_ACK);
-        assert(events[event_count - 1u] == EVENT_DMA_STARTED);
+        assert(events[event_count - 1u] == EVENT_HOST_START_SCAN_ACK);
         assert(host_receive_count == 4u);
+}
+
+static void uart_failures_report_the_stage_status_and_original_error_bits(void)
+{
+        reset_test_state();
+        lidar_reset_status = HAL_ERROR;
+        assert(!run_startup_sequence());
+        assert(strcmp(failure_message,
+                      "STARTUP FAILED: lidar reset: UART4 TX HAL_ERROR "
+                      "error=0x00000008") == 0);
+        assert(lidar_receive_count == 0u);
+
+        reset_test_state();
+        lidar_receive_status = HAL_TIMEOUT;
+        assert(!run_startup_sequence());
+        assert(strcmp(failure_message,
+                      "STARTUP FAILED: lidar info: UART4 RX HAL_TIMEOUT "
+                      "error=0x0000000A") == 0);
+
+        reset_test_state();
+        dma_start_status = HAL_BUSY;
+        assert(run_startup_sequence());
+        assert(!start_lidar_scan());
+        assert(strstr(failure_message, "lidar DMA: UART4 RX DMA HAL_BUSY") != NULL);
+
+        reset_test_state();
+        malformed_health_reply = true;
+        assert(!run_startup_sequence());
+        assert(strcmp(failure_message, "STARTUP FAILED: lidar health") == 0);
+
+        reset_test_state();
+        assert(run_startup_sequence());
+        lidar_receive_status = HAL_TIMEOUT;
+        assert(!start_lidar_scan());
+        assert(strstr(failure_message, "lidar scan meta: UART4 RX HAL_TIMEOUT") != NULL);
+        assert(events[event_count - 2u] == EVENT_LIDAR_SCAN_REQUEST);
+
+        reset_test_state();
+        assert(run_startup_sequence());
+        malformed_scan_meta = true;
+        assert(!start_lidar_scan());
+        assert(strcmp(failure_message, "STARTUP FAILED: lidar scan meta") == 0);
+        assert(events[event_count - 2u] == EVENT_LIDAR_SCAN_META);
 }
 
 int main(void)
@@ -348,5 +467,6 @@ int main(void)
         failed_handshake_receive_stops_startup();
         failed_handshake_ack_stops_startup();
         failed_time_sync_returns_to_handshake_on_retry();
+        uart_failures_report_the_stage_status_and_original_error_bits();
         return 0;
 }

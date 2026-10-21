@@ -12,9 +12,7 @@
 #include "stm32f4xx_hal_def.h"
 #include "tx/frame.h"
 #include "tx/header.h"
-#include "lidar/sys.h"
 #include "lidar/core.h"
-#include "lidar/parser/meta.h"
 #include "lidar/translate.h"
 #include "imu/handler.h"
 #include "motor.h"
@@ -27,34 +25,27 @@ void loop()
         while (!run_startup_sequence())
                 ;
 
+        // 　set interrupt for motor control command
         if (HAL_UART_Receive_IT(&huart2, host_command_buf, HOST_MOTOR_COMMAND_SIZE) !=
             HAL_OK)
                 Error_Handler();
 
-        // // send start scan command
-        HAL_StatusTypeDef scan_start_status =
-                HAL_UART_Transmit(&huart4, MSG[MSG_TYPE_SCAN], MSG_SIZE, 100);
-
-        if (scan_start_status != HAL_OK)
-                Error_Handler();
-
-        // // wait for meta frame for scan
-        ParserMeta meta = {0};
-        read_meta(&meta);
-        if (meta.res_mode != SYS_RES_MODE_CONTINUOUS ||
-            meta.type_code != SYS_TYPE_CODE_SCAN)
+        if (!start_lidar_scan())
                 Error_Handler();
 
         if (!imu_setup())
                 Error_Handler();
 
-        LIDAR_SCANNING_GPIO_Port->ODR ^= LIDAR_SCANNING_Pin;
+        LIDAR_SCANNING_GPIO_Port->ODR |= LIDAR_SCANNING_Pin;
 
         size_t len;
 
         while (1) {
                 // Retry a queued TX frame if a previous DMA start was busy.
                 try_dispatch_tx();
+
+                if (recover_lidar_rx())
+                        continue;
 
                 // if (scan_stop_requested)
                 // stop scan and send ack
@@ -113,7 +104,7 @@ void loop()
                 }
 
                 len = translate_scan_frame(tbs->_buf);
-                if (len == 0u || is_lapped()) {
+                if (recover_lidar_rx() || len == 0u || is_lapped()) {
                         reset_read_idx();
                         continue;
                 }
