@@ -12,9 +12,7 @@
 #define BLOCKING_READ_GUARD_SIZE 2u
 // blocking受信でも末尾まで読めるよう、受信済み範囲の後ろに仮想の2バイトを置く。
 
-// データが途切れた待ちは短く切り、フレーム全体にも上限を設ける。
-// 最大775バイトのscanは230400 bpsで約34msかかるため、全体には40msを許す。
-#define LIDAR_BYTE_TIMEOUT_MS  2u
+#define LIDAR_BYTE_TIMEOUT_MS  20u
 #define LIDAR_FRAME_TIMEOUT_MS 40u
 
 static uint32_t read_started_at;
@@ -85,12 +83,12 @@ void start_read_timeout(void)
 
 bool has_read_timed_out(void)
 {
-        // unsignedの差分で、tickが一周した場合も経過時間を求める。
         if ((uint32_t)(HAL_GetTick() - read_started_at) >= LIDAR_FRAME_TIMEOUT_MS)
                 read_timed_out = true;
 
         return read_timed_out;
 }
+// フレームの40msは、バイトを読み進めても延長しない。
 
 /**
  * @brief read a byte from the buffer if buffer is safe to read,
@@ -110,7 +108,6 @@ uint8_t read_byte(void)
                 }
         }
 
-        // 失敗後は残りを読み進めず、parser側でフレーム全体を破棄する。
         if (has_read_timed_out())
                 return 0u;
 

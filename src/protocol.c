@@ -25,6 +25,7 @@ void loop()
         while (!run_startup_sequence())
                 ;
 
+        // 　set interrupt for motor control command
         if (HAL_UART_Receive_IT(&huart2, host_command_buf, HOST_MOTOR_COMMAND_SIZE) !=
             HAL_OK)
                 Error_Handler();
@@ -35,7 +36,7 @@ void loop()
         if (!imu_setup())
                 Error_Handler();
 
-        LIDAR_SCANNING_GPIO_Port->ODR ^= LIDAR_SCANNING_Pin;
+        LIDAR_SCANNING_GPIO_Port->ODR |= LIDAR_SCANNING_Pin;
 
         size_t len;
 

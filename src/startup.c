@@ -256,6 +256,8 @@ bool run_startup_sequence(void)
                 return fail_startup(NULL, "TX buffer");
         uint8_t* tx_frame = tx_slot->_buf;
 
+        HAL_Delay(2000u);
+
         // hostが3秒ごとに送るhandshakeを待つ。それ以外のコマンドでは進まない。
         uint8_t command[HOST_COMMAND_SIZE];
         do {

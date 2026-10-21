@@ -23,9 +23,9 @@ bool     is_lapped(void);
 void     reset_read_idx(void);
 void     increment_lap(void);
 bool     is_safe_read(void);
-// フレーム解析の前に期限を設定する。失敗時のread_byte()の0は有効データと区別する。
 void     start_read_timeout(void);
 bool     has_read_timed_out(void);
+// フレーム解析開始から40ms、バイトごとの受信待ちは20msで打ち切る。
 uint8_t  read_byte(void);
 uint32_t dec_little_endian(const uint8_t);
 void     setup_blocking_rx(size_t length);

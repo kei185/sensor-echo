@@ -154,6 +154,11 @@ flowchart LR
 RX DMA continues while all TX slots are busy. The CPU read position stays
 unchanged, so the next free-slot check can detect whether DMA passed it.
 
+LiDAR reads have a 40 ms deadline measured from the start of frame parsing.
+Each byte read also has a 20 ms wait limit. Successful reads do not extend the
+frame deadline. When either limit is reached, the parser discards the incomplete
+frame and returns control to the main loop.
+
 ## RX ring positions
 
 `write_idx` is the next DMA destination. `read_idx` is the next byte for the
