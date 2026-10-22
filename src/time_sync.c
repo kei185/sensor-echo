@@ -39,17 +39,17 @@ typedef struct
 
 uint64_t time_sync_get_unix_time_ms(void)
 {
+        // RTCのずれを観測するため、HAL tickで時刻を進める修正は一旦無効化。
         /*
+        // 同期後はLSIで動くRTCを使わず、HAL tickの差分で時刻を進める。
+        // unsignedの差分により、継続して読み出す間はtickの周回も扱える。
         if (synchronized_unix_time_ms != 0u) {
                 uint32_t tick = HAL_GetTick();
                 synchronized_unix_time_ms += (uint32_t)(tick - synchronized_tick);
                 synchronized_tick = tick;
                 return synchronized_unix_time_ms;
         }
-        // 同期後はLSIで動くRTCを使わず、HAL tickの差分で時刻を進める。
-        // unsignedの差分により、継続して読み出す間はtickの周回も扱える。
         */
-        // RTCのずれを観測するため、HAL tickで時刻を進める修正は一旦無効化。
 
         RTC_TimeTypeDef time;
         RTC_DateTypeDef date;
@@ -175,8 +175,8 @@ static bool estimate_current_unix_time(
                 return false;
 
         const TimeSyncMeasurement* sample = &session->measurement;
-        uint32_t controller_round_trip    = sample->res_time - sample->req_time;
         // req_time/res_timeはログのreq_tick/res_tick。符号なし32bitの差で周回も扱う。
+        uint32_t controller_round_trip    = sample->res_time - sample->req_time;
 
         if (sample->send_time < sample->ack_time)
                 return false;
@@ -185,18 +185,18 @@ static bool estimate_current_unix_time(
         if (host_processing > controller_round_trip)
                 return false;
 
-        uint64_t network_round_trip = controller_round_trip - host_processing;
         // ホストのUnix時刻同士の差を引き、ACKからTime受信までの通信時間を求める。
+        uint64_t network_round_trip = controller_round_trip - host_processing;
 
+        // 行き帰りの遅延は同じと仮定する。受信後の経過時間もHAL tickの差で求める。
         uint64_t one_way_delay         = network_round_trip / 2u;
         uint64_t elapsed_after_receive = current_tick - sample->res_time;
-        // 行き帰りの遅延は同じと仮定する。受信後の経過時間もHAL tickの差で求める。
         if (sample->send_time > UINT64_MAX - one_way_delay ||
             sample->send_time + one_way_delay > UINT64_MAX - elapsed_after_receive)
                 return false;
 
-        *unix_time_ms = sample->send_time + one_way_delay + elapsed_after_receive;
         // current_tickはRTC設定の計算前に読む。RTCへの書き込み時間は含めない。
+        *unix_time_ms = sample->send_time + one_way_delay + elapsed_after_receive;
         return true;
 }
 
@@ -215,20 +215,20 @@ bool time_sync_set_rtc(const TimeSyncSession* session)
             HAL_RTC_SetTime(&hrtc, &calendar.time, RTC_FORMAT_BIN) != HAL_OK)
                 return false;
 
+        // 現在はSynchPrediv=255なので256段階。ミリ秒からカウントへの変換で端数を切り捨てる。
         uint32_t subsecond_count = (uint32_t)((uint64_t)calendar.millisecond *
                                               (hrtc.Init.SynchPrediv + 1u) / 1000u);
-        // 現在はSynchPrediv=255なので256段階。ミリ秒からカウントへの変換で端数を切り捨てる。
+        // ADD1Sで1秒足し、SUBFSカウント分を引く。0カウントなら補正しない。
+        // 例: 500msならSUBFS=128で、1 - 128/256 = 0.5秒進める。
+        // 初回の秒未満の時刻合わせであり、RTCの進む速さを補正する処理ではない。
         uint32_t shift_subfs     = hrtc.Init.SynchPrediv + 1u - subsecond_count;
         if (subsecond_count != 0u &&
             HAL_RTCEx_SetSynchroShift(&hrtc, RTC_SHIFTADD1S_SET, shift_subfs) != HAL_OK)
                 return false;
-        // ADD1Sで1秒足し、SUBFSカウント分を引く。0カウントなら補正しない。
-        // 例: 500msならSUBFS=128で、1 - 128/256 = 0.5秒進める。
-        // 初回の秒未満の時刻合わせであり、RTCの進む速さを補正する処理ではない。
 
+        // RTCの設定中に経過した時間も、最初に取得したtickを基準に含める。
         // synchronized_unix_time_ms = unix_time_ms;
         // synchronized_tick         = tick;
-        // RTCの設定中に経過した時間も、最初に取得したtickを基準に含める。
         return true;
 }
 
@@ -332,13 +332,13 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
         // decode  host times
         uint64_t ack_time  = 0u;
         uint64_t send_time = 0u;
+        // 18バイトのTimeから、位置2と10の64bit Unixミリ秒をlittle-endianで読む。
         for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
                 ack_time |= (uint64_t)time_frame[TIME_SYNC_ACK_TIME_OFFSET + i]
                             << (i * 8u);
                 send_time |= (uint64_t)time_frame[TIME_SYNC_SEND_TIME_OFFSET + i]
                              << (i * 8u);
         }
-        // 18バイトのTimeから、位置2と10の64bit Unixミリ秒をlittle-endianで読む。
 
         session->measurement = (TimeSyncMeasurement){
                 .req_time  = req_time,

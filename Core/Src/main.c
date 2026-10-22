@@ -86,10 +86,10 @@ static void observe_clock(void)
 {
         static uint8_t  frame[TX_FRAME_CAPACITY];
         TimeSyncSession session = {0};
+        // Macと既存の時刻同期を1回だけ行い、元のRTCを観測する。
         if (!time_sync_handle_start(frame, &session) || !time_sync_set_rtc(&session) ||
             !time_sync_send_report_if_ready(frame, &session))
                 Error_Handler();
-        // Macと既存の時刻同期を1回だけ行い、元のRTCを観測する。
 
         while (1) {
                 uint32_t tick        = HAL_GetTick();
@@ -103,6 +103,7 @@ static void observe_clock(void)
                 if (rtc == 0u || payload_len < 0 || (size_t)payload_len >= capacity)
                         Error_Handler();
 
+                // ヘッダのtimestampにRTC値、本文に同時点のHAL tickを載せる。
                 size_t len = tx_frame_write_header(
                         frame,
                         sizeof(frame),
@@ -112,7 +113,6 @@ static void observe_clock(void)
                 if (len == 0u ||
                     HAL_UART_Transmit(&huart2, frame, (uint16_t)len, 100u) != HAL_OK)
                         Error_Handler();
-                // ヘッダのtimestampにRTC値、本文に同時点のHAL tickを載せる。
 
                 HAL_Delay(1000u);
         }
@@ -143,19 +143,19 @@ int main(void)
         SystemClock_Config();
 
         /* USER CODE BEGIN SysInit */
-        uint32_t tick_cycles = HAL_RCC_GetHCLKFreq() / 1000u;
+        // HAL_GetTickやHAL_Delayの基準を補正する。RTCの補正はMX_RTC_Initで別に設定する。
         // 設定上のHCLK[Hz]を1000で割り、1msあたりのクロック数を求める（84MHzなら84000）。
-        tick_cycles += (tick_cycles * 3712u + 500000u) / 1000000u;
+        uint32_t tick_cycles = HAL_RCC_GetHCLKFreq() / 1000u;
         // Macとの約61秒の比較でHAL tickは+3712ppm（+0.3712%）。
         // 1msごとに数えるクロック数を増やして遅くする（84000 + 312 = 84312）。
         // 500000は分母1000000の半分。整数の除算で311.808を312へ四捨五入する。
         // 数値末尾のuは符号なし整数を表す。この補正値は実機の観測に基づく試験値。
+        tick_cycles += (tick_cycles * 3712u + 500000u) / 1000000u;
+        // 求めた周期をSysTickへ設定する。設定に失敗した場合は停止する。
         if (HAL_SYSTICK_Config(tick_cycles) != 0u)
                 Error_Handler();
-        // 求めた周期をSysTickへ設定する。設定に失敗した場合は停止する。
-        HAL_NVIC_SetPriority(SysTick_IRQn, uwTickPrio, 0u);
         // 内部のSysTick_Configで変わる割り込み優先度を、HALの設定値へ戻す。
-        // HAL_GetTickやHAL_Delayの基準を補正する。RTCの補正はMX_RTC_Initで別に設定する。
+        HAL_NVIC_SetPriority(SysTick_IRQn, uwTickPrio, 0u);
         /* USER CODE END SysInit */
 
         /* Initialize all configured peripherals */
@@ -179,9 +179,9 @@ int main(void)
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
+        // 検証中は時計の観測だけを行う。
         // loop();
         observe_clock();
-        // 検証中は時計の観測だけを行う。
         /* USER CODE END 3 */
 }
 
@@ -261,14 +261,14 @@ static void MX_RTC_Init(void)
                 Error_Handler();
         }
         /* USER CODE BEGIN RTC_Init 2 */
+        // 約61秒の観測でLSEのRTCは+19.6ppm。32秒あたり21パルスを除いて約20ppm遅くする試験値。
+        // 初回同期の時刻差は変えず、同期後にずれが増える速さを補正する。
         if (HAL_RTCEx_SetSmoothCalib(
                     &hrtc,
                     RTC_SMOOTHCALIB_PERIOD_32SEC,
                     RTC_SMOOTHCALIB_PLUSPULSES_RESET,
                     21u) != HAL_OK)
                 Error_Handler();
-        // 約61秒の観測でLSEのRTCは+19.6ppm。32秒あたり21パルスを除いて約20ppm遅くする試験値。
-        // 初回同期の時刻差は変えず、同期後にずれが増える速さを補正する。
         /* USER CODE END RTC_Init 2 */
 }
 
