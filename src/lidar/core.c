@@ -76,6 +76,7 @@ void increment_lap() { _RX_BUF.lap++; }
 bool is_safe_read()
 {
         int32_t diff = write_idx() - _RX_BUF.read_idx;
+        // (uint32_t)diff & 0xFFF = diff mod 4096（0〜4095）。
         return ((uint32_t)diff & (CORE_RX_BUF_SIZE - 1u)) > BLOCKING_READ_GUARD_SIZE;
         // 4096バイトのringなので、折り返しは下位12bitで扱う。
 }
