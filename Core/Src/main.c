@@ -105,7 +105,13 @@ int main(void)
         SystemClock_Config();
 
         /* USER CODE BEGIN SysInit */
-
+        uint32_t tick_cycles = HAL_RCC_GetHCLKFreq() / 1000u;
+        tick_cycles += (tick_cycles * 3712u + 500000u) / 1000000u;
+        if (HAL_SYSTICK_Config(tick_cycles) != 0u)
+                Error_Handler();
+        HAL_NVIC_SetPriority(SysTick_IRQn, uwTickPrio, 0u);
+        // Macとの約61秒の比較でHAL tickは+3712ppm。1ms分のカウントを増やして遅くする試験値。
+        // HCLK=84MHzでは84000→84312。SysTick_Configで変わる割り込み優先度もHALの値へ戻す。
         /* USER CODE END SysInit */
 
         /* Initialize all configured peripherals */
@@ -151,11 +157,10 @@ void SystemClock_Config(void)
          * in the RCC_OscInitTypeDef structure.
          */
         RCC_OscInitStruct.OscillatorType =
-                RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSI;
+                RCC_OSCILLATORTYPE_HSI | RCC_OSCILLATORTYPE_LSE;
         RCC_OscInitStruct.LSEState            = RCC_LSE_ON;
         RCC_OscInitStruct.HSIState            = RCC_HSI_ON;
         RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-        RCC_OscInitStruct.LSIState            = RCC_LSI_ON;
         RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_ON;
         RCC_OscInitStruct.PLL.PLLSource       = RCC_PLLSOURCE_HSI;
         RCC_OscInitStruct.PLL.PLLM            = 16;
@@ -202,7 +207,7 @@ static void MX_RTC_Init(void)
         hrtc.Instance            = RTC;
         hrtc.Init.HourFormat     = RTC_HOURFORMAT_24;
         hrtc.Init.AsynchPrediv   = 127;
-        hrtc.Init.SynchPrediv    = 249;
+        hrtc.Init.SynchPrediv    = 255;
         hrtc.Init.OutPut         = RTC_OUTPUT_DISABLE;
         hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
         hrtc.Init.OutPutType     = RTC_OUTPUT_TYPE_OPENDRAIN;
@@ -210,7 +215,14 @@ static void MX_RTC_Init(void)
                 Error_Handler();
         }
         /* USER CODE BEGIN RTC_Init 2 */
-
+        if (HAL_RTCEx_SetSmoothCalib(
+                    &hrtc,
+                    RTC_SMOOTHCALIB_PERIOD_32SEC,
+                    RTC_SMOOTHCALIB_PLUSPULSES_RESET,
+                    21u) != HAL_OK)
+                Error_Handler();
+        // 約61秒の観測でLSEのRTCは+19.6ppm。32秒あたり21パルスを除いて約20ppm遅くする試験値。
+        // 初回同期の時刻差は変えず、同期後にずれが増える速さを補正する。
         /* USER CODE END RTC_Init 2 */
 }
 

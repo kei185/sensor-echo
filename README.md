@@ -2,6 +2,10 @@
 - docs: ai-generated  
 - design: ---
 
+## ドキュメント
+
+- [時刻同期](docs/time_sync.md)
+
 # reference 
 imu 
 
