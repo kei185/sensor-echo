@@ -23,6 +23,10 @@
 /* USER CODE BEGIN Includes */
 #include "motor.h"
 #include "protocol.h"
+#include "time_sync.h"
+#include "tx/header.h"
+#include <inttypes.h>
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -78,7 +82,41 @@ static void MX_TIM5_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void observe_clock(void)
+{
+        static uint8_t  frame[TX_FRAME_CAPACITY];
+        TimeSyncSession session = {0};
+        if (!time_sync_handle_start(frame, &session) || !time_sync_set_rtc(&session) ||
+            !time_sync_send_report_if_ready(frame, &session))
+                Error_Handler();
+        // Macと既存の時刻同期を1回だけ行い、元のRTCを観測する。
 
+        while (1) {
+                uint32_t tick        = HAL_GetTick();
+                uint64_t rtc         = time_sync_get_unix_time_ms();
+                size_t   capacity    = sizeof(frame) - TX_FRAME_HEADER_SIZE;
+                int      payload_len = snprintf(
+                        (char*)frame + TX_FRAME_HEADER_SIZE,
+                        capacity,
+                        "CLOCK tick_ms=%" PRIu32 "\r\n",
+                        tick);
+                if (rtc == 0u || payload_len < 0 || (size_t)payload_len >= capacity)
+                        Error_Handler();
+
+                size_t len = tx_frame_write_header(
+                        frame,
+                        sizeof(frame),
+                        (uint16_t)payload_len,
+                        FRAME_TYPE_TIME_SYNC_REPORT,
+                        rtc);
+                if (len == 0u ||
+                    HAL_UART_Transmit(&huart2, frame, (uint16_t)len, 100u) != HAL_OK)
+                        Error_Handler();
+                // ヘッダのtimestampにRTC値、本文に同時点のHAL tickを載せる。
+
+                HAL_Delay(1000u);
+        }
+}
 /* USER CODE END 0 */
 
 /**
@@ -141,7 +179,9 @@ int main(void)
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
-        loop();
+        // loop();
+        observe_clock();
+        // 検証中は時計の観測だけを行う。
         /* USER CODE END 3 */
 }
 

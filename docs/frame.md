@@ -8,7 +8,8 @@ Initialization starts after this exchange. For protocol errors and recovery,
 see [protocol.md](protocol.md#connection-and-recovery).
 
 The diagram shows the normal startup path. `MOTOR ACK` and host recovery during
-normal communication are planned.
+normal communication are planned. For the clock-observation entry point, see
+[clock.md](clock.md).
 
 ```mermaid
 sequenceDiagram

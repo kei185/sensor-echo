@@ -34,8 +34,23 @@ typedef struct
         uint16_t        millisecond;
 } RtcCalendar;
 
+// static uint64_t synchronized_unix_time_ms;
+// static uint32_t synchronized_tick;
+
 uint64_t time_sync_get_unix_time_ms(void)
 {
+        /*
+        if (synchronized_unix_time_ms != 0u) {
+                uint32_t tick = HAL_GetTick();
+                synchronized_unix_time_ms += (uint32_t)(tick - synchronized_tick);
+                synchronized_tick = tick;
+                return synchronized_unix_time_ms;
+        }
+        // 同期後はLSIで動くRTCを使わず、HAL tickの差分で時刻を進める。
+        // unsignedの差分により、継続して読み出す間はtickの周回も扱える。
+        */
+        // RTCのずれを観測するため、HAL tickで時刻を進める修正は一旦無効化。
+
         RTC_TimeTypeDef time;
         RTC_DateTypeDef date;
 
@@ -188,7 +203,8 @@ static bool estimate_current_unix_time(
 bool time_sync_set_rtc(const TimeSyncSession* session)
 {
         uint64_t unix_time_ms;
-        if (!estimate_current_unix_time(session, HAL_GetTick(), &unix_time_ms))
+        uint32_t tick = HAL_GetTick();
+        if (!estimate_current_unix_time(session, tick, &unix_time_ms))
                 return false;
 
         RtcCalendar calendar;
@@ -202,15 +218,18 @@ bool time_sync_set_rtc(const TimeSyncSession* session)
         uint32_t subsecond_count = (uint32_t)((uint64_t)calendar.millisecond *
                                               (hrtc.Init.SynchPrediv + 1u) / 1000u);
         // 現在はSynchPrediv=255なので256段階。ミリ秒からカウントへの変換で端数を切り捨てる。
-        if (subsecond_count == 0u)
-                return true;
-
-        uint32_t shift_subfs = hrtc.Init.SynchPrediv + 1u - subsecond_count;
-        return HAL_RTCEx_SetSynchroShift(&hrtc, RTC_SHIFTADD1S_SET, shift_subfs) ==
-               HAL_OK;
+        uint32_t shift_subfs     = hrtc.Init.SynchPrediv + 1u - subsecond_count;
+        if (subsecond_count != 0u &&
+            HAL_RTCEx_SetSynchroShift(&hrtc, RTC_SHIFTADD1S_SET, shift_subfs) != HAL_OK)
+                return false;
         // ADD1Sで1秒足し、SUBFSカウント分を引く。0カウントなら補正しない。
         // 例: 500msならSUBFS=128で、1 - 128/256 = 0.5秒進める。
         // 初回の秒未満の時刻合わせであり、RTCの進む速さを補正する処理ではない。
+
+        // synchronized_unix_time_ms = unix_time_ms;
+        // synchronized_tick         = tick;
+        // RTCの設定中に経過した時間も、最初に取得したtickを基準に含める。
+        return true;
 }
 
 static size_t

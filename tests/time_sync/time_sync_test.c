@@ -342,6 +342,22 @@ static void rtc_uses_network_delay_and_elapsed_time(void)
         assert(rtc_shift_count == 1u);
         assert(shift_add_one_second == RTC_SHIFTADD1S_SET);
         assert(shift_subtract_fraction == 55u);
+
+        /*
+        set_time.Minutes = 35u;
+        set_time.Seconds = 36u;
+        fake_tick        = 2020u;
+        assert(time_sync_get_unix_time_ms() == UINT64_C(1709210097789));
+        // RTCが40秒先へ進んでも、同期時点からのHAL tick差分を使う。
+
+        fake_tick            = UINT32_MAX;
+        uint64_t before_wrap = UINT64_C(1709210096789) + UINT32_MAX - 1020u;
+        assert(time_sync_get_unix_time_ms() == before_wrap);
+        fake_tick = 10u;
+        assert(time_sync_get_unix_time_ms() == before_wrap + 11u);
+        // 約49.7日でのHAL tickの周回をまたいでも、Unix時刻を進める。
+        */
+        // HAL tickによる時刻更新を無効化している間は、この期待値も使わない。
 }
 
 static void rtc_rejects_an_impossible_host_interval(void)
@@ -390,10 +406,10 @@ int main(void)
         handler_collects_and_reports_one_measurement();
         handler_reports_round_trip_across_tick_wrap();
         handler_rejects_a_time_frame_with_the_wrong_command();
-        rtc_uses_network_delay_and_elapsed_time();
         rtc_rejects_an_impossible_host_interval();
         rtc_returns_unix_milliseconds();
         rtc_handles_subseconds_after_a_shift();
         rtc_returns_zero_on_read_failure();
+        rtc_uses_network_delay_and_elapsed_time();
         return 0;
 }
