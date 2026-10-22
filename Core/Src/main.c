@@ -106,7 +106,9 @@ int main(void)
 
         /* USER CODE BEGIN SysInit */
         uint32_t tick_cycles = HAL_RCC_GetHCLKFreq() / 1000u;
+        // HCLK[Hz]を1000で割り、1msあたりのクロック数を求める。
         tick_cycles += (tick_cycles * 3712u + 500000u) / 1000000u;
+        // 分母1000000の半分を足してから割り、補正量を整数へ四捨五入する。
         if (HAL_SYSTICK_Config(tick_cycles) != 0u)
                 Error_Handler();
         HAL_NVIC_SetPriority(SysTick_IRQn, uwTickPrio, 0u);
