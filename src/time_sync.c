@@ -160,6 +160,7 @@ static bool estimate_current_unix_time(
                 return false;
 
         const TimeSyncMeasurement* sample = &session->measurement;
+        // req_time/res_timeはログのreq_tick/res_tick。符号なし32bitの差で周回も扱う。
         uint32_t controller_round_trip    = sample->res_time - sample->req_time;
 
         if (sample->send_time < sample->ack_time)
@@ -169,15 +170,17 @@ static bool estimate_current_unix_time(
         if (host_processing > controller_round_trip)
                 return false;
 
-        // Remove host work between t2 and t3; the remainder is UART travel time.
+        // ホストのUnix時刻同士の差を引き、ACKからTime受信までの通信時間を求める。
         uint64_t network_round_trip = controller_round_trip - host_processing;
-        // Assume equal travel in both directions, then advance from t4 to now.
+
+        // 行き帰りの遅延は同じと仮定する。受信後の経過時間もHAL tickの差で求める。
         uint64_t one_way_delay         = network_round_trip / 2u;
         uint64_t elapsed_after_receive = current_tick - sample->res_time;
         if (sample->send_time > UINT64_MAX - one_way_delay ||
             sample->send_time + one_way_delay > UINT64_MAX - elapsed_after_receive)
                 return false;
 
+        // current_tickはRTC設定の計算前に読む。RTCへの書き込み時間は含めない。
         *unix_time_ms = sample->send_time + one_way_delay + elapsed_after_receive;
         return true;
 }
@@ -196,12 +199,15 @@ bool time_sync_set_rtc(const TimeSyncSession* session)
             HAL_RTC_SetTime(&hrtc, &calendar.time, RTC_FORMAT_BIN) != HAL_OK)
                 return false;
 
+        // 現在はSynchPrediv=255なので256段階。ミリ秒からカウントへの変換で端数を切り捨てる。
         uint32_t subsecond_count = (uint32_t)((uint64_t)calendar.millisecond *
                                               (hrtc.Init.SynchPrediv + 1u) / 1000u);
         if (subsecond_count == 0u)
                 return true;
 
-        // RTC advances by 1 - SUBFS/(PREDIV_S + 1), matching the millisecond part.
+        // ADD1Sで1秒足し、SUBFSカウント分を引く。0カウントなら補正しない。
+        // 例: 500msならSUBFS=128で、1 - 128/256 = 0.5秒進める。
+        // 初回の秒未満の時刻合わせであり、RTCの進む速さを補正する処理ではない。
         uint32_t shift_subfs = hrtc.Init.SynchPrediv + 1u - subsecond_count;
         return HAL_RTCEx_SetSynchroShift(&hrtc, RTC_SHIFTADD1S_SET, shift_subfs) ==
                HAL_OK;
@@ -307,6 +313,7 @@ bool time_sync_handle_start(uint8_t* tx_frame, TimeSyncSession* session)
         // decode  host times
         uint64_t ack_time  = 0u;
         uint64_t send_time = 0u;
+        // 18バイトのTimeから、位置2と10の64bit Unixミリ秒をlittle-endianで読む。
         for (size_t i = 0u; i < TIME_SYNC_HOST_TIME_SIZE; ++i) {
                 ack_time |= (uint64_t)time_frame[TIME_SYNC_ACK_TIME_OFFSET + i]
                             << (i * 8u);

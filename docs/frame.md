@@ -7,7 +7,7 @@ The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
 Initialization starts after this exchange. For protocol errors and recovery,
 see [protocol.md](protocol.md#connection-and-recovery).
 
-The diagram shows the current startup path. `MOTOR ACK` and host recovery during
+The diagram shows the normal startup path. `MOTOR ACK` and host recovery during
 normal communication are planned.
 
 ```mermaid
@@ -33,12 +33,7 @@ sequenceDiagram
     LiDAR-->>Controller: Health status
     Controller->>Host: Health system frame
     Controller->>Host: READY system frame
-    Host->>Controller: Time sync start AA A4
-    Controller->>Host: TIME SYNC START ACK
-    Host->>Controller: Time AA A5 plus two host timestamps
-    Controller->>Host: TIME ACK system frame
-    Controller->>Controller: Correct and set RTC
-    Controller->>Host: Time-sync report
+    Note over Host,Controller: Time synchronization (see time_sync.md)
     Host->>Controller: Start scan command AA A2
     Controller->>Host: START SCAN ACK system frame
     Controller->>Controller: Arm 4-byte host command RX using interrupts
@@ -145,64 +140,10 @@ byte offset   0      1      2      3      4
 For left `50%` and right `100%`, the payload is `32 64` in hexadecimal. The
 complete command is `AA A7 32 64`. Both zero, `AA A7 00 00`, brakes both motors.
 
-### Time command
+### Time synchronization
 
-After `0xAA 0xA4`, the controller records `req_tick` and replies with
-`TIME SYNC START ACK`. The host records `ack_time` when it receives that ACK.
-Immediately before sending the Time frame, the host records `send_time`. Both
-values are unsigned 64-bit Unix timestamps in milliseconds. The controller
-records `res_tick` as soon as the complete 18-byte frame arrives, verifies the
-command, and replies with `TIME ACK`.
-
-The Time frame uses this byte layout:
-
-| Wire order | Byte offset | Size | Field | Format |
-|---:|---:|---:|---|---|
-| 1st | `0` | 2 bytes | Command | `0xAA 0xA5` |
-| 2nd | `2` | 8 bytes | **`ack_time`** (ACK receive time) | Unsigned 64-bit Unix milliseconds, little-endian |
-| 3rd | `10` | 8 bytes | **`send_time`** (Time send time) | Unsigned 64-bit Unix milliseconds, little-endian |
-
-The host performs this four-message exchange once. The controller uses the four
-timestamps to set its RTC, then sends one time-sync report.
-The RTC uses LSI with prescalers `128 * 250` for its nominal 32 kHz clock.
-Actual LSI frequency still varies, so this does not calibrate its clock accuracy.
-
-## Time Synchronization
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Host
-    participant Controller
-
-    Host->>Controller: Time sync start AA A4
-    Controller->>Controller: Record req_tick
-    Controller->>Host: TIME SYNC START ACK, type 0x0A
-    Host->>Host: Record ack_time when ACK arrives
-    Host->>Host: Record send_time before sending Time
-    Host->>Controller: Time AA A5 plus ack_time and send_time
-    Controller->>Controller: Record res_tick
-    Controller->>Host: TIME ACK, type 0x0B
-    Controller->>Controller: Estimate current Unix time and set RTC
-    Controller->>Host: Measurement report, type 0x0C
-```
-
-The controller removes host processing time from the controller-side round
-trip. It assumes equal transmission time in both directions:
-
-```text
-controller_round_trip = res_tick - req_tick
-host_processing       = send_time - ack_time
-network_round_trip    = controller_round_trip - host_processing
-time_at_res_tick      = send_time + network_round_trip / 2
-current_unix_time     = time_at_res_tick + (current_tick - res_tick)
-```
-
-All differences are in milliseconds. The controller rejects a measurement if
-the host clock moves backwards or `host_processing` is longer than
-`controller_round_trip`. The RTC stores UTC calendar time from 2000 through
-2099. Its subsecond shift register preserves the millisecond part at the RTC
-prescaler resolution.
+The exchange, Time command layout, calculation, and report format are described
+in [time_sync.md](time_sync.md).
 
 # Tx Frame
 |Start of Frame (16bit)  | payload Length (16bit) | CRC (8bit)|Type (8bit)|timestamp (64bit) |  payload   |
@@ -242,8 +183,10 @@ value. CRC and type are one byte each and therefore have no byte order.
 ### System Message
 
 System message types start at `0x04`; type `0x00` is not used. Their payloads are
-ASCII text without a line terminator or NUL byte. The payload starts immediately
-after the 14-byte TX header. The header payload length marks the message end.
+ASCII text without a trailing NUL. Most have no line terminator; the time-sync
+report ends with CRLF as specified in [time_sync.md](time_sync.md#プロトコル).
+The payload starts immediately after the 14-byte TX header. The header payload
+length marks the message end.
 
 | Type | Event | Host system message payload |
 |---|---|---|
@@ -263,18 +206,8 @@ after the 14-byte TX header. The header payload length marks the message end.
 `INITIALIZING`, device information, and health messages are defined but disabled
 in the current startup path. `MOTOR ACK` is defined but not sent yet.
 
-A time-sync report is one ASCII payload ending with `\r\n`:
-
-```text
-TIME SYNC: samples=1 | #1 req_tick=N ms res_tick=N ms round_trip=N ms ack_time=N ms send_time=N ms\r\n
-```
-
-`req_tick` is captured before the controller sends `TIME SYNC START ACK`.
-`ack_time` is captured by the host when that ACK arrives. `send_time` is captured
-by the host immediately before it sends the Time frame. `res_tick` is captured
-by the controller immediately after the complete Time frame arrives. Unsigned
-subtraction gives `round_trip = res_tick - req_tick`, including across one
-tick-counter wrap. The host processing interval is `send_time - ack_time`.
+The time-sync report format and field meanings are described in
+[time_sync.md](time_sync.md#プロトコル).
 
 The health status is `FAULT` when any bit in the status byte is set. `NN` is the
 two-digit uppercase hexadecimal status byte. The device serial is the 16 raw

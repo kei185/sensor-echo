@@ -5,6 +5,8 @@ software-started TX DMA.
 
 TX slot ownership, queueing, and UART DMA dispatch are described in
 [tx.md](tx.md).
+The time-sync protocol and calculation are described in
+[time_sync.md](time_sync.md).
 
 ## Current host command reception
 
