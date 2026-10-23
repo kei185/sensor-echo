@@ -290,47 +290,51 @@ The host can convert gyroscope samples to `dps` and accelerometer samples to
 
 Direction: controller to host, type `0x03`.
 
-Size: 4 bytes per sample. Each sample reports the rotation change since the
+Size: 8 bytes per sample. Each sample reports the raw encoder count change since the
 previous counter reset, not a cumulative position. The target sampling period
 is 100 ms (10 Hz) using TIM5. Both encoders use TI12 (four counts per quadrature
 cycle), with 2800 counts per wheel revolution and an update after 28000 counts.
 The left wheel uses TIM4 and the right wheel uses TIM3. Pending update flags are
-included in each snapshot and cleared along with the counters. Reverse encoder
-motion is outside the current scope.
+included in each snapshot and cleared along with the counters. Update events
+increment or decrement the wrap count according to the timer's DIR bit.
 
 The left wheel value comes first, followed by the right wheel value. Each value
-is a signed 16-bit Q6 wheel rotation count in two's complement and uses the
+is a signed 32-bit raw encoder count in two's complement and uses the
 same little-endian byte order as the other multi-byte host-frame fields.
+Positive values indicate forward wheel motion, and negative values indicate
+reverse wheel motion. Motor commands remain forward-only.
 
 | Payload order | Payload offset | Field | Size | Format | Unit | Byte order |
 |---:|---:|---|---:|---|---|---|
-| 1st | `0` | **Left** wheel rotation count | 2 bytes | Signed 16-bit Q6 | rotations | little-endian |
-| 2nd | `2` | **Right** wheel rotation count | 2 bytes | Signed 16-bit Q6 | rotations | little-endian |
+| 1st | `0` | **Left** encoder count | 4 bytes | Signed 32-bit integer | counts | little-endian |
+| 2nd | `4` | **Right** encoder count | 4 bytes | Signed 32-bit integer | counts | little-endian |
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 
 packet
-+8: "left Q6 low byte"
-+8: "left Q6 high byte"
-+8: "right Q6 low byte"
-+8: "right Q6 high byte"
++32: "left count (little-endian)"
++32: "right count (little-endian)"
 ```
 
-Divide the encoded value by 64 to get the wheel rotation count:
+The representable range is -2147483648 through 2147483647 counts per sample. Divide the
+encoded value by 2800 to get the wheel rotation change:
 
 \[
-\text{wheel rotations} = \frac{\text{Q6 value}}{64}
+\text{wheel rotations} = \frac{\text{encoder count}}{2800}
 \]
 
-For example, left wheel `12.5` rotations and right wheel `7.25` rotations are
-encoded as `12.5 * 64 = 800 = 0x0320` and
-`7.25 * 64 = 464 = 0x01D0`:
+For example, left wheel `318` counts and right wheel `-43` counts are
+encoded as `0x0000013E` and `0xFFFFFFD5`:
 
-| Byte offset | `0` | `1` | `2` | `3` |
-|---:|---:|---:|---:|---:|
-| Wire byte | `20` | `03` | `D0` | `01` |
-| Field | left low | left high | right low | right high |
+| Byte offset | `0` | `1` | `2` | `3` | `4` | `5` | `6` | `7` |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Wire byte | `3E` | `01` | `00` | `00` | `D5` | `FF` | `FF` | `FF` |
+| Field | left byte 0 | left byte 1 | left byte 2 | left byte 3 | right byte 0 | right byte 1 | right byte 2 | right byte 3 |
+
+The wire type is unchanged, but the payload size and units differ from the
+former 4-byte Q6 wheel rotations. Update the host parser and velocity conversion
+together with the firmware. The new parser ignores old 4-byte Encoder payloads.
 
 ### CRC
 The CRC field uses the 8-bit `crc_8()` function from libcrc. For now, its input

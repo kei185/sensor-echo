@@ -368,11 +368,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
         if (htim->Instance == htim5.Instance)
                 motor_encoder_timeout = true;
 
-        if (htim->Instance == htim3.Instance)
-                motor_right_counter++;
+        if (htim->Instance == htim3.Instance) {
+                if (TIM3->CR1 & TIM_CR1_DIR)
+                        motor_right_counter--;
+                else
+                        motor_right_counter++;
+        }
 
-        if (htim->Instance == htim4.Instance)
-                motor_left_counter++;
+        if (htim->Instance == htim4.Instance) {
+                if (TIM4->CR1 & TIM_CR1_DIR)
+                        motor_left_counter--;
+                else
+                        motor_left_counter++;
+        }
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)

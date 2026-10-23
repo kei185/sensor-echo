@@ -12,10 +12,10 @@
 
 enum MOTOR_MODE GLOBAL_MOTOR_MODE = MOTOR_MODE_PHASE_ENABLE;
 
-const uint32_t MOTOR_COUNTER_SCALER  = 10u;
-volatile bool     motor_encoder_timeout = false;
-volatile uint32_t motor_right_counter   = 0u;
-volatile uint32_t motor_left_counter    = 0u;
+const uint32_t   MOTOR_COUNTER_SCALER  = 10u;
+volatile bool    motor_encoder_timeout = false;
+volatile int32_t motor_right_counter   = 0u;
+volatile int32_t motor_left_counter    = 0u;
 
 void init_motor(void)
 {
@@ -92,17 +92,17 @@ void motor_timeout_handler(uint8_t* buf)
         const uint32_t primask = __get_PRIMASK();
         __disable_irq();
 
-        uint32_t left_counter  = motor_left_counter;
+        int32_t  left_counter  = motor_left_counter;
         uint32_t left_count    = htim4.Instance->CNT;
-        uint32_t right_counter = motor_right_counter;
+        int32_t  right_counter = motor_right_counter;
         uint32_t right_count   = htim3.Instance->CNT;
 
         if (__HAL_TIM_GET_FLAG(&htim4, TIM_FLAG_UPDATE)) {
-                left_counter++;
+                left_counter += (htim4.Instance->CR1 & TIM_CR1_DIR) ? -1 : 1;
                 left_count = htim4.Instance->CNT;
         }
         if (__HAL_TIM_GET_FLAG(&htim3, TIM_FLAG_UPDATE)) {
-                right_counter++;
+                right_counter += (htim3.Instance->CR1 & TIM_CR1_DIR) ? -1 : 1;
                 right_count = htim3.Instance->CNT;
         }
 
@@ -115,17 +115,11 @@ void motor_timeout_handler(uint8_t* buf)
 
         __set_PRIMASK(primask);
 
-        const int64_t left  = (int32_t)left_counter * MOTOR_COUNTER_PERIOD + left_count;
-        const int64_t right = (int32_t)right_counter * MOTOR_COUNTER_PERIOD + right_count;
-        // 換算は左右の取得と割り込みマスクの復元を済ませてから行う。
-
-        const int16_t left_q6 =
-                (int16_t)(left * WHEEL_ROTATION_Q6_SCALE / MOTOR_COUNTS_PER_REVOLUTION);
-        memcpy(buf, &left_q6, sizeof left_q6);
-
-        const int16_t right_q6 =
-                (int16_t)(right * WHEEL_ROTATION_Q6_SCALE / MOTOR_COUNTS_PER_REVOLUTION);
-        memcpy(buf + sizeof left_q6, &right_q6, sizeof right_q6);
+        const int32_t left = (int32_t)(left_counter * MOTOR_COUNTER_PERIOD + left_count);
+        const int32_t right =
+                (int32_t)(right_counter * MOTOR_COUNTER_PERIOD + right_count);
+        memcpy(buf, &left, sizeof left);
+        memcpy(buf + sizeof left, &right, sizeof right);
 }
 
 void motor_command_handler(uint8_t* buf)
@@ -134,8 +128,8 @@ void motor_command_handler(uint8_t* buf)
         const int8_t right = (int8_t)buf[1];
 
         // 左右とも範囲内と確認してから、両輪の出力を更新する。
-        if (left < 0 || left > MOTOR_MAX_DUTY_PERCENT ||
-            right < 0 || right > MOTOR_MAX_DUTY_PERCENT)
+        if (left < 0 || left > MOTOR_MAX_DUTY_PERCENT || right < 0 ||
+            right > MOTOR_MAX_DUTY_PERCENT)
                 return;
 
         motor2_forward(left);
