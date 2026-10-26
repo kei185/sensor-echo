@@ -1,6 +1,6 @@
 ## Scan path
 
-The main loop gives ready IMU and encoder samples priority over LiDAR parsing.
+Sensor execution and timing are shown in [sensors.md](sensors.md).
 The diagram below shows the LiDAR path when a TX slot is available.
 
 ```mermaid
@@ -61,9 +61,8 @@ at the ring end. The reader decrements it when its index returns to zero.
 
 ### Invalid packet, timeout, or overrun
 
-LiDAR reads have a 40 ms deadline measured from the start of frame parsing.
-Each byte read also has a 20 ms wait limit. Successful reads do not extend the
-frame deadline. These time limits are separate from the two-byte read guard.
+LiDAR read deadlines are shown in [Sensor Scheduling](sensors.md).
+These time limits are separate from the two-byte read guard.
 
 If parsing fails, times out, or detects an overrun, the main loop drops the
 partial frame and all unread RX data. It moves the reader to the current DMA

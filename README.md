@@ -5,6 +5,7 @@
 ## Documents
 
 - [Protocol](docs/protocol.md)
+- [Sensor Scheduling](docs/sensors.md)
 - [Arbiter](docs/arbiter.md)
 - [Frame Format](docs/frame.md)
 - [Time Sync](docs/time_sync.md)
