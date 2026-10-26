@@ -2,43 +2,16 @@
 - docs: ai-generated  
 - design: ---
 
-## ドキュメント
+## Documents
 
-- [時刻同期](docs/time_sync.md)
+- [Protocol](docs/protocol.md)
+- [Arbiter](docs/arbiter.md)
+- [Frame Format](docs/frame.md)
+- [Time Sync](docs/time_sync.md)
+- [Hardware Notes](memo.md)
 
-# reference 
-imu 
+## References
 
-- https://note.com/kurosuke_9481/n/n98859e35bb34
-
-エンコーダ
-
-- https://www.youtube.com/watch?v=TaM3P_83ALs
-
-- HAL
-
-https://qiita.com/toshidln/items/496097ecc0f6a650a6eb#%E5%89%B2%E3%82%8A%E8%BE%BC%E3%81%BF%E3%83%8F%E3%83%B3%E3%83%89%E3%83%A9
-
-## モーター・エンコーダの設定
-
-モーター指令は左右それぞれ0〜100%のPWM dutyを受け付け、正転のみを許す。
-左右のどちらかが範囲外なら指令全体を無視し、直前の出力を維持する。0%は停止。
-実機の配線は右がモーター1（TIM2 CH1）、左がモーター2（TIM2 CH2）。
-エンコーダは右TIM3・左TIM4で、両方ともTI12の4逓倍を使い、車輪1回転を2800カウントとして扱う。
-周回用の更新割り込みを有効にし、100msごとの取得時には未処理の周回も含めてカウンタと更新フラグをリセットする。
-更新時のDIRに応じて周回数を加減算し、左右の符号付き32bit生カウントを計8バイトで送る。
-ホストが2800で割って車輪の回転量へ換算する。従来のQ6回転量とは単位が異なるため、ホストも合わせて更新する。
-
-### 走行速度の実測
-
-速度計測用ブランチで両輪を同じdutyで3001ms駆動し、移動距離を実測した。
-通常のファームウェアは起動時に自動走行せず、ホストからの指令を待つ。
-
-| PWM duty | 左回転量 | 左rpm | 右回転量 | 右rpm | 移動距離 | 平均速度 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 25% | 1.58 rev | 31.50 | 1.55 rev | 31.00 | 0.215 m | 0.0716 m/s |
-| 50% | 3.66 rev | 73.25 | 3.61 rev | 72.23 | 0.51 m | 0.1699 m/s |
-| 75% | 5.61 rev | 112.16 | 5.64 rev | 112.77 | 0.75 m | 0.2499 m/s |
-| 100% | 7.72 rev | 154.34 | 7.58 rev | 151.59 | 1.10 m | 0.3665 m/s |
-
-平均速度は距離を3.001秒で割った値。PWM指令の値は速度そのものではない。
+- IMU: [チビドローン開発#4 ～ドローンの「三半規管」取り付けの実験と失敗](https://note.com/kurosuke_9481/n/n98859e35bb34)
+- Encoder: [たった２行のプログラムでエンコーダを説明](https://www.youtube.com/watch?v=TaM3P_83ALs)
+- HAL: [STM32 nucleoを使う (3) EXTI割り込み](https://qiita.com/toshidln/items/496097ecc0f6a650a6eb#%E5%89%B2%E3%82%8A%E8%BE%BC%E3%81%BF%E3%83%8F%E3%83%B3%E3%83%89%E3%83%A9)

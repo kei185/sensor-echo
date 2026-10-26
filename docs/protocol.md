@@ -1,251 +1,130 @@
-# Connection, Recovery, and Scan Data Flow
+# Protocol
 
-Startup uses blocking UART transfers. Scanning uses circular RX DMA and
-software-started TX DMA.
-
-TX slot ownership, queueing, and UART DMA dispatch are described in
-[tx.md](tx.md).
-The time-sync protocol and calculation are described in
-[time_sync.md](time_sync.md).
-
-## Current host command reception
-
-| Item | Current source behavior |
-|---|---|
-| Startup | Blocking handshake, time sync, and start-scan exchange |
-| RX during scanning | One 4-byte motor frame per interrupt receive |
-| Field order | `AA A7` → left signed PWM % → right signed PWM % |
-| Completion callback | Checks the command and updates motor PWM inside the interrupt |
-| Next receive | Armed inside the same callback after processing the frame |
-| Invalid command or PWM value | Ignored; previous motor output stays active |
-| Motor ACK | Defined but not sent |
-| Recovery during normal communication | Not implemented |
-
-```text
-       Receive one 4-byte frame
-                  |
-                  v
-       Interrupt checks the frame
-                  |
-          +-------+-------+
-          |               |
-        Valid          Invalid
-          |               |
-          v               v
-       Apply PWM        Ignore
-          |               |
-          +-------+-------+
-                  |
-                  v
-       Arm the next 4-byte receive
-```
-
-The callback updates motor output and arms the next receive before returning.
-It does not wait for the main loop. Motor commands send no ACK. The current
-path has no RX queue, incomplete-command timeout, or byte-by-byte
-resynchronization.
-
-LiDAR parsing stops after 20 ms without a readable byte, or 40 ms for the
-whole frame. The partial frame is discarded so the main loop can continue
-other sensor and TX work. Motor commands can run in the interrupt while
-LiDAR parsing waits. At 230400 bps, the largest scan packet takes about
-34 ms on the wire.
+This document describes frame exchanges and recovery.
+Command bytes and payloads are defined in [frame.md](frame.md).
+Buffer management and DMA transfers are described in [arbiter.md](arbiter.md).
+The time-sync exchange and calculation are described in [time_sync.md](time_sync.md).
 
 ## Connection and recovery
 
-The host starts a session with a handshake. The diagrams below show planned
-recovery. Returning an active session to handshake is not implemented yet.
+### Startup sequence
+
+The host sends a handshake every 3 seconds until it receives `HANDSHAKE ACK`.
+Initialization starts after this exchange. The handshake is a connection
+request, not a heartbeat.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host
+    participant Controller
+    participant LiDAR
+
+    loop Retry every 3 seconds until HANDSHAKE ACK arrives
+        Host->>Controller: Handshake AA A0
+        opt Controller receives the handshake
+            Controller->>Host: HANDSHAKE ACK system frame
+        end
+    end
+    Controller->>Host: INITIALIZING system frame
+    Controller->>LiDAR: Soft reset A5 40 (no response)
+    Note right of Controller: Wait 500 ms before the next LiDAR command
+    Controller->>LiDAR: Device information request A5 90
+    LiDAR-->>Controller: Device information
+    Controller->>Host: Device information system frame
+    Controller->>LiDAR: Health request A5 92
+    LiDAR-->>Controller: Health status
+    Controller->>Host: Health system frame
+    Controller->>Host: READY system frame
+    Note over Host,Controller: Time synchronization (see time_sync.md)
+    Host->>Controller: Start scan command AA A2
+    Controller->>Host: START SCAN ACK system frame
+    Controller->>LiDAR: Start scan command A5 60
+    LiDAR-->>Controller: 7-byte scan meta
+    Note right of Controller: Check scan meta, start RX DMA, and set up the IMU
+    LiDAR-->>Controller: Continuous scan data
+    Controller->>Host: Sensor frames
+```
+
+`START SCAN ACK` confirms the host command only. It does not confirm that LiDAR
+or IMU setup has finished, or that the LiDAR has replied.
+The controller checks device information and health before scanning.
+After scanning starts, it sends no further LiDAR setup commands.
+
+### Current recovery
+
+| Event | Current action |
+| --- | --- |
+| Startup fails before `START SCAN ACK` is sent | Sends `STARTUP FAILED` when possible, then waits for a new handshake |
+| Sending the LiDAR scan command, checking scan meta, or starting LiDAR DMA fails | Reports the stage when possible, then halts in `Error_Handler()` |
+| Arming host command RX or setting up the IMU fails | Halts in `Error_Handler()`; no startup failure frame is sent for these failures |
+| A LiDAR packet is invalid, times out, or is overwritten | Drops the current scan input; the host session continues |
+| UART4 RX fails | Restarts LiDAR RX; the host session continues |
+| A new handshake arrives during scanning | Does not restart the session |
+| UART2 reports an error during scanning | No host RX recovery is implemented |
+| Arming the next host receive fails | Halts in `Error_Handler()` |
+
+After a startup retry, the host must repeat startup and time sync before
+starting a new scan. The failure message format is defined in
+[frame.md](frame.md#system-message).
+
+Local LiDAR recovery keeps the host session and queued TX frames. It does not
+repeat time sync or the startup exchange. Buffer resets and DMA restart steps
+are described in [arbiter.md](arbiter.md#rx-recovery).
+
+### Planned session recovery
+
+The recovery below is not implemented. It would return an active host session
+to handshake after a protocol error.
 
 ```mermaid
 flowchart TD
-    power["Power on"] --> handshake["Handshake stage<br/>Host retries every 3 seconds until ACK"]
-    handshake -- ACK received --> setup["Startup and UTC time sync<br/>Wait for host start command"]
-    setup -- Start command --> active["Normal communication<br/>Sensor frames and motor commands"]
-    setup -- Protocol error --> recover["Stop operation<br/>Discard old session data"]
-    active -- Protocol error --> recover
-    recover --> handshake
+    active["Normal communication"] --> error["Protocol error or missing expected reply"]
+    error --> stop["Stop scanning and motors"]
+    stop --> discard["Discard old RX, TX, command, and time-sync state"]
+    discard --> handshake["Wait for a new handshake"]
+    handshake --> setup["Repeat startup and time sync"]
+    setup --> start["Wait for a new start command"]
+    start --> active
 ```
 
-```text
-                       NORMAL COMMUNICATION
-            +------+                            +------------+
-            | Host | -- left/right PWM % -----> | Controller |
-            |      | <------ MOTOR ACK -------- |            |
-            |      | <-- sensor/encoder data -- |            |
-            +------+                            +------------+
-                |                                      |
-                +--------- protocol error -------------+
-                                   |
-                                   v
-                         Stop current operation
-                         Discard old session data
-                                   |
-                                   v
-                          HANDSHAKE STAGE
-            +------+                            +------------+
-            | Host | -- handshake, every 3 s --> | Controller |
-            |      | <----- handshake ACK ----- |            |
-            +------+                            +------------+
-                                   |
-                                   v
-                    Repeat startup and time sync
-                    Wait for a new start command
-```
+- Protocol errors would include failed UART transfers, invalid startup replies,
+  malformed frames, incomplete commands after a timeout, and invalid time samples.
+- A new handshake would end the previous session before `HANDSHAKE ACK`.
+  The host would retry every 3 seconds until it receives the ACK.
+- An accepted motor command would receive `MOTOR ACK`. A missing ACK would
+  return the host to handshake.
 
-- Handshake retries stop when the host receives the ACK. There is no periodic
-  handshake during normal communication.
-- A protocol error includes a failed UART transfer, an invalid startup reply,
-  a malformed frame, an incomplete command after a receive timeout, or an
-  invalid time sample.
-- Recovery stops scanning and wheel motion, discards partial RX data and
-  queued TX frames, and clears the current command and time-sync state.
-- The controller waits for a new handshake. The host returns to its 3-second
-  handshake retry loop when it detects failure or a missing expected reply.
-- A new handshake ends any previous controller session before the ACK. This
-  keeps both sides in the same stage even if a previous ACK was lost.
-- Motor commands resume only after startup, time sync, and a new start command.
-- Each accepted motor command receives `MOTOR ACK`. If the expected ACK is
-  missing, the host returns to the handshake stage.
+## Motor commands
 
-These are recovery requirements. The message bytes and startup order are defined in
-[frame.md](frame.md#startup-sequence).
-
-A LiDAR RX overrun uses the local recovery below. It does not restart the host
-handshake when the stream parser can find a new valid packet.
-
-## Motor command and ACK
-
-This is the planned ACK exchange. The current source sends no motor ACK and
-ignores invalid values without starting recovery.
+During normal communication, motor commands and sensor reports use separate
+directions of the host UART.
 
 ```mermaid
-flowchart TD
-    command["Host sends AA A7 and left/right signed PWM percentages"] --> validate{"Both values in 0 to 100?"}
-    validate -- No --> recover["Protocol recovery<br/>Return to handshake stage"]
-    validate -- Yes --> accept["Apply forward PWM duty<br/>Zero: brake"]
-    accept --> ack["Controller sends MOTOR ACK"]
-    ack --> host{"Host received ACK?"}
-    host -- Yes --> active["Continue normal communication"]
-    host -- Receive timeout --> recover
+sequenceDiagram
+    participant Host
+    participant Controller
+
+    par Motor commands
+        Host->>Controller: Motor control
+        Note right of Controller: Check the command and both PWM values
+        alt Valid command
+            Note right of Controller: Apply both PWM values
+        else Invalid command
+            Note right of Controller: Ignore it and keep both outputs
+        end
+        Note over Host,Controller: No motor ACK is sent
+    and Sensor reports
+        Controller->>Host: LiDAR frames
+        Controller->>Host: IMU frames
+        Controller->>Host: Encoder frames
+    end
 ```
 
-The planned ACK confirms command acceptance. Encoder reports show the measured
-wheel rotations separately.
+An invalid motor command does not restart the handshake.
+There is no motor-command watchdog. If no new command arrives, the last PWM
+output stays active.
 
-## Scan path
-
-```mermaid
-flowchart LR
-    lidar["LiDAR byte stream"] --> rx_dma["RX DMA"]
-    rx_dma --> rx_ring["4096-byte circular RX ring"]
-    rx_ring --> free{"TX slot free?"}
-    free -- No --> pause["Keep CPU read position"]
-    pause --> free
-    free -- Yes --> before{"DMA already passed reader?"}
-    before -- Yes --> drop["Discard current RX data and any unsent frame<br/>Move reader to DMA position"]
-    before -- No --> parse["Parse bytes and build one host frame"]
-    parse --> after{"DMA passed reader while parsing?"}
-    after -- Yes --> drop
-    after -- No --> tx_queue["Five TX slots"]
-    drop --> fresh["Wait for fresh bytes"]
-    fresh --> free
-    tx_queue --> tx_dma["TX DMA"]
-    tx_dma --> host["Host"]
-```
-
-RX DMA continues while all TX slots are busy. The CPU read position stays
-unchanged, so the next free-slot check can detect whether DMA passed it.
-
-LiDAR reads have a 40 ms deadline measured from the start of frame parsing.
-Each byte read also has a 20 ms wait limit. Successful reads do not extend the
-frame deadline. When either limit is reached, the parser discards the incomplete
-frame and returns control to the main loop.
-
-## RX ring positions
-
-`write_idx` is the next DMA destination. `read_idx` is the next byte for the
-CPU. The CPU never reads the current DMA destination.
-
-```text
-index       0                                             4095
-            |-----------------------------------------------|
-DMA         W -> next write
-CPU                         R -> next read
-```
-
-`lap` is the number of DMA wraps that the reader has not crossed yet. DMA
-increments it at the ring end. The reader decrements it when its index returns
-to zero.
-
-| `lap` | Index relation | Result |
-| ---: | --- | --- |
-| 0 | Any valid indexes | DMA has not passed the reader |
-| 1 | `write_idx <= read_idx` | DMA has not passed the reader |
-| 1 | `write_idx > read_idx` | DMA passed the reader |
-| 2 or more | Any valid indexes | DMA passed the reader |
-
-```mermaid
-flowchart TD
-    start["Read lap and indexes"] --> many{"lap > 1?"}
-    many -- Yes --> passed["Overrun"]
-    many -- No --> one{"lap == 1?"}
-    one -- No --> safe["No overrun"]
-    one -- Yes --> ahead{"write_idx > read_idx?"}
-    ahead -- Yes --> passed
-    ahead -- No --> safe
-```
-
-The indexes are signed values. This keeps `100 - 3500 = -3400` negative
-after one DMA wrap instead of wrapping to a large unsigned value.
-
-## Overrun recovery
-
-```mermaid
-flowchart LR
-    detect["Detect overrun"] --> discard["Discard unread and partial data"]
-    discard --> align["Set read position to current DMA position"]
-    align --> wait["Wait for new bytes"]
-    wait --> sync["Find the next valid packet"]
-    sync --> resume["Resume frame conversion"]
-```
-
-Recovery starts from bytes that arrive after alignment. It does not wait for
-another full ring wrap.
-
-For a UART4 or RX DMA error, the error callback requests recovery. The main loop
-aborts the remaining RX transfer, resets the RX ring, and restarts circular DMA.
-It discards the partial frame and retries on the next loop if abort or restart
-fails. Host communication and already queued TX frames continue.
-
-## Data checks
-
-```mermaid
-flowchart LR
-    progress["lap and indexes"] --> overwrite["Detect ring overwrite"]
-    marker["Packet header"] --> boundary["Find packet boundary"]
-    cs["LiDAR packet CS"] --> packet["Check packet bytes"]
-    lastcrc["LiDAR LastCRC"] --> rotation["Check a completed rotation"]
-    hostcrc["Host frame CRC"] --> hostfield["Check host length field"]
-```
-
-The ring position detects overwritten bytes. A checksum cannot replace that
-check. LiDAR packet `CS` and `LastCRC` are future checks. The current host
-CRC covers only the two payload-length bytes.
-
-## LiDAR-only throughput at 230400 bps
-
-| Quantity | Calculation | Result |
-| --- | ---: | ---: |
-| LiDAR point rate | configured ranging rate | 4000 points/s |
-| Host point payload | `4000 * 4` | 16000 bytes/s |
-| UART capacity with 8N1 | `230400 / 10` | 23040 bytes/s |
-| Remaining capacity | `23040 - 16000` | 7040 bytes/s |
-
-At a 6 Hz scan rate, one rotation carries about 667 points. Its host
-point payload is about 2667 bytes, while the UART can send 3840 bytes in the
-same interval. This leaves about 1173 bytes for 14-byte host headers, or a
-theoretical maximum of 83 LiDAR packets per rotation. Actual packet count and
-TX queue occupancy must be measured before using this limit.
-
-For TX queue capacity and lifecycle, see [tx.md](tx.md). For host commands and
-frame fields, see [frame.md](frame.md).
+The command format and valid PWM range are defined in
+[frame.md](frame.md#motor-control). Host receive-buffer handling is described in
+[arbiter.md](arbiter.md#host-command-rx).

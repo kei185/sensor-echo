@@ -31,6 +31,7 @@ void dma_receive_complete_handler(void) { increment_lap(); }
 
 void dma_receive_error_handler(void) { lidar_rx_failed = true; }
 
+// ErrorCallbackはHALのDMA停止完了後に呼ばれる。再開失敗時は次のloopで再試行する。
 bool recover_lidar_rx(void)
 {
         if (!lidar_rx_failed)
@@ -46,7 +47,6 @@ bool recover_lidar_rx(void)
                 lidar_rx_failed = true;
         return true;
 }
-// ErrorCallbackはHALのDMA停止完了後に呼ばれる。再開失敗時は次のloopで再試行する。
 
 void uart_transmit_complete_handler(void)
 {
